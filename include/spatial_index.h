@@ -32,6 +32,10 @@
 #include "constants.h"
 #include "dataset.h"
 
+#ifdef __ARM_FEATURE_SVE
+#include <arm_sve.h>
+#endif /* __ARM_FEATURE_SVE */
+
 #ifdef WITH_MPI
 #include <mpi.h>
 #include "mpi_util.h"
@@ -197,6 +201,7 @@ private:
         }
 
         // sorting the points and cells out-of-place, memorize the original order
+        //#pragma omp parallel for
         for (size_t i = 0; i < items; ++i) {
             const Cell cell = m_cells[i];
             const auto& locator = m_cell_index[cell];
@@ -736,20 +741,136 @@ public:
         return neighboring_points;
     }
 
-    Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const T EPS2,
+    Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const float EPS2,
                          const Clusters& clusters, std::vector<size_t>& min_points_area) const {
         const size_t dimensions = m_data.m_chunk[1];
-        const T* point = static_cast<T*>(m_data.m_p) + point_index * dimensions;
+        const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
+        Cluster cluster_label = m_global_point_offset + point_index + 1;
+
+	size_t n = neighboring_points.size();
+
+	std::vector<uint32_t> neighboring_points_u32(neighboring_points.begin(), neighboring_points.end());
+	std::vector<float> other_point_x(n);
+	std::vector<float> other_point_y(n);
+	std::vector<float> other_point_z(n);
+	std::vector<float> results(n);
+
+	const float* neighbouring_points_ptr = static_cast<float*>(m_data.m_p);
+
+	for (size_t i = 0; i < n; i += svcntw()) {
+
+            svbool_t pg = svwhilelt_b32(i, n);
+            svuint32_t sv_indices = svld1_u32(pg, &neighboring_points_u32[i]);
+            svuint32_t sv_indices_x = svmul_n_u32_z(pg, sv_indices, dimensions);
+	    svuint32_t sv_indices_y = svadd_n_u32_z(pg, sv_indices_x, 1);
+            svuint32_t sv_indices_z = svadd_n_u32_z(pg, sv_indices_x, 2);
+
+            svfloat32_t loaded_values_x = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_x);
+            svfloat32_t loaded_values_y = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_y);
+            svfloat32_t loaded_values_z = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_z);
+
+	    svst1_f32(pg, &other_point_x[i], loaded_values_x);
+	    svst1_f32(pg, &other_point_y[i], loaded_values_y);
+	    svst1_f32(pg, &other_point_z[i], loaded_values_z);
+
+        }
+	
+	svfloat32_t point_v_x = svdup_n_f32(point[0]);
+
+	svfloat32_t point_v_y = svdup_n_f32(point[1]);
+
+	svfloat32_t point_v_z = svdup_n_f32(point[2]);
+
+
+
+	for(size_t t=0; t < n; t += svcntw()) {
+
+	    svbool_t pg = svwhilelt_b32(t, n);
+
+	    svfloat32_t other_point_v_x = svld1(pg, &other_point_x[t]);
+
+            svfloat32_t other_point_v_y = svld1(pg, &other_point_y[t]);
+
+            svfloat32_t other_point_v_z = svld1(pg, &other_point_z[t]);
+
+	    svfloat32_t vx_diff = svsub_f32_z(pg, point_v_x, other_point_v_x);
+
+	    svfloat32_t vy_diff = svsub_f32_z(pg, point_v_y, other_point_v_y);
+
+	    svfloat32_t vz_diff = svsub_f32_z(pg, point_v_z, other_point_v_z);
+
+	    svfloat32_t vx_diff_square = svmul_f32_z(pg, vx_diff, vx_diff);
+
+	    svfloat32_t vy_diff_square = svmul_f32_z(pg, vy_diff, vy_diff);
+
+	    svfloat32_t vz_diff_square = svmul_f32_z(pg, vz_diff, vz_diff);
+
+	    svfloat32_t results_v = svadd_z(pg, svadd_z(pg, vx_diff_square, vy_diff_square), vz_diff_square);
+
+	    //svbool_t mask = svcmpgt_n_f32(pg, results_v, EPS2);
+        
+        // Store the result only if the condition is met
+            //svst1(mask, &result[i], sum); 
+
+	    svst1(pg, &results[t], results_v); 
+
+	}
+
+	// iterate through all neighboring points and check whether they are in range
+        for (size_t i = 0; i < n; i++) {
+            //float offset = results[i];
+            //const float* other_point = static_cast<float*>(m_data.m_p) + neighbor * dimensions;
+
+            // determine euclidean distance to other point
+
+#if 0	
+            for (size_t d = 0; d < dimensions; ++d) {
+		const float distance = point[d] - other_point[d];
+                offset += distance * distance;
+            }
+#endif
+#if 0
+                //svbool_t pg = svwhilelt_b32(i, dimensions);
+
+		//svfloat32_t va = svld1(pg, &point[i]);
+                svfloat32_t vb = svld1(pg, &other_point[i]);
+
+                svfloat32_t diff = svsub_f32_z(pg, va, vb);
+
+                svfloat32_t square = svmul_f32_z(pg, diff, diff);
+
+                offset += svaddv_f32(svptrue_b32(), square);
+
+#endif
+            // .. if in range, add it to the vector with in range points
+            if (results[i] <= EPS2) {
+                const Cluster neighbor_label = clusters[ neighboring_points[i]];
+
+                min_points_area.push_back(neighboring_points[i]);
+                // if neighbor point has an assigned label and it is a core, determine what label to take
+                if (neighbor_label != NOT_VISITED and neighbor_label < 0) {
+                    cluster_label = std::min(cluster_label, std::abs(neighbor_label));
+                }
+            }
+        }
+
+        return cluster_label;
+    }
+
+    Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const double EPS2,
+                         const Clusters& clusters, std::vector<size_t>& min_points_area) const {
+        const size_t dimensions = m_data.m_chunk[1];
+        const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
         Cluster cluster_label = m_global_point_offset + point_index + 1;
 
         // iterate through all neighboring points and check whether they are in range
         for (size_t neighbor: neighboring_points) {
-            T offset = 0.0;
-            const T* other_point = static_cast<T*>(m_data.m_p) + neighbor * dimensions;
+            double offset = 0.0;
+            const double* other_point = static_cast<double*>(m_data.m_p) + neighbor * dimensions;
 
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
-		const T distance = point[d] - other_point[d];
+                const T distance = point[d] - other_point[d];
                 offset += distance * distance;
             }
             // .. if in range, add it to the vector with in range points
