@@ -38,6 +38,7 @@
 #include "io.h"
 #include "rules.h"
 #include "spatial_index.h"
+#include <papi.h>
 
 class HPDBSCAN {
     float m_epsilon;
@@ -54,13 +55,26 @@ class HPDBSCAN {
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
 
+
         Rules rules;
         Cell previous_cell = NOT_VISITED;
-        std::vector<size_t> neighboring_points;
+        std::vector<uint32_t> neighboring_points;
 
+#if 0
+        int retval;
+
+	int numEvents = 4;
+
+        long long values[4];
+
+        int events[4] = {PAPI_L1_DCH, PAPI_L1_DCA, PAPI_L2_DCH, PAPI_L2_DCA};
+
+        if (PAPI_start_counters(events, numEvents) != PAPI_OK )  // !=PAPI_OK
+	    printf("PAPI error: %d\n", 1);
+#endif
         // local DBSCAN run
-        #pragma omp parallel for schedule(dynamic, 32) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
-        for (size_t point = lower; point < upper; ++point) {
+        #pragma omp parallel for schedule(dynamic, 2048) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
+        for (uint32_t point = lower; point < upper; ++point) {
             // small optimization, we only perform a neighborhood query if it is a new cell
             Cell current_cell = index.cell_of(point);
 
@@ -69,17 +83,21 @@ class HPDBSCAN {
                 previous_cell = current_cell;
             }
 
-            std::vector<size_t> min_points_area;
+            std::vector<uint32_t> min_points_area;
+	    uint32_t count = 0;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
-                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
+                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area, count);
             }
 
-            if (min_points_area.size() >= m_min_points) {
+            if (count >= m_min_points) {
                 // set the label to be negative as to mark it as core point
                 atomic_min(clusters.data() + point, -cluster_label);
 
-                for (size_t other : min_points_area) {
+		min_points_area.erase(std::remove(min_points_area.begin(), min_points_area.end(), INT_MAX), min_points_area.end());
+                for (auto& other : min_points_area) {
+
+		   // if(other != INT_MAX) {
                     // get the absolute value here, we are only interested what cluster it is not in the core property
                     Cluster other_cluster_label = std::abs(clusters[other]);
                     // check whether the other point is a cluster
@@ -89,13 +107,31 @@ class HPDBSCAN {
                     }
                     // mark as a border point
                     atomic_min(clusters.data() + other, cluster_label);
-                }
+                  //  }
+		}
             }
             else if (clusters[point] == NOT_VISITED) {
                 // mark as noise
                 atomic_min(clusters.data() + point, NOISE);
             }
         }
+
+#if 0
+        if ((retval = PAPI_read_counters(values, numEvents)) != PAPI_OK) {
+            fprintf(stderr, "PAPI failed to read counters: %s\n", PAPI_strerror(retval));
+            exit(1);
+        }
+
+	std::cout<<"Level 1 data cache hits "<<values[0]<<std::endl;
+	std::cout<<"Level 1 data cache accesses "<<values[1]<<std::endl; 
+	double cache_miss_rate = static_cast<double>(values[0]) / static_cast<double>(values[1]);
+	std::cout<<"L1 cache hit rate "<<cache_miss_rate<<std::endl;
+
+	std::cout<<"L2 data cache hits "<<values[2]<<std::endl;
+        std::cout<<"L2 data cache accesses "<<values[3]<<std::endl;
+        cache_miss_rate = static_cast<double>(values[2]) / static_cast<double>(values[3]);
+        std::cout<<"L2 cache hit rate "<<cache_miss_rate<<std::endl;
+#endif
 
         return rules;
     }
@@ -129,8 +165,8 @@ class HPDBSCAN {
         Cluster halo_labels[total_items_to_receive];
 
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_LONG,
-            halo_labels, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            clusters.data(), send_counts, send_displs, MPI_INT,
+            halo_labels, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
         );
 
         // update the local clusters with the received information
@@ -186,8 +222,8 @@ class HPDBSCAN {
         // exchange the rules and update the own rules
         Cluster incoming_rules[total];
         MPI_Alltoallv(
-            serialized_rules, send_counts, send_displs, MPI_LONG,
-            incoming_rules, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            serialized_rules, send_counts, send_displs, MPI_INT,
+            incoming_rules, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
         );
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
@@ -262,8 +298,8 @@ class HPDBSCAN {
 
         // collect the individual unique clusters on the MPI root into a global buffer
         MPI_Gatherv(
-            local_buffer.data(), number_of_unique_clusters, MPI_LONG,
-            global_buffer.data(), set_counts, set_displs, MPI_LONG, 0, MPI_COMM_WORLD
+            local_buffer.data(), number_of_unique_clusters, MPI_INT,
+            global_buffer.data(), set_counts, set_displs, MPI_INT, 0, MPI_COMM_WORLD
         );
         // accumulate the metrics of each node
         MPI_Reduce(

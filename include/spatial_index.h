@@ -58,7 +58,7 @@ class SpatialIndex {
 
     std::vector<size_t>        m_swapped_dimensions;
     size_t                     m_halo;
-    size_t                     m_global_point_offset;
+    uint32_t                   m_global_point_offset;
     std::vector<size_t>        m_initial_order;
 
     #ifdef WITH_MPI
@@ -684,7 +684,7 @@ public:
         return m_cells[index];
     }
 
-    std::vector<size_t> get_neighbors(const Cell cell) const {
+    std::vector<uint32_t> get_neighbors(const Cell cell) const {
         const hsize_t dimensions = m_data.m_chunk[1];
 
         // allocate some space for the neighboring cells, be pessimistic and reserve 3^dims for possibly all neighbors
@@ -723,7 +723,7 @@ public:
         }
 
         // copy the points from the neighboring cells over
-        std::vector<size_t> neighboring_points;
+        std::vector<uint32_t> neighboring_points;
         neighboring_points.reserve(number_of_points);
 
         for (size_t neighbor_cell : neighboring_cells) {
@@ -741,78 +741,83 @@ public:
         return neighboring_points;
     }
 
-    Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const float EPS2,
-                         const Clusters& clusters, std::vector<size_t>& min_points_area) const {
-        const size_t dimensions = m_data.m_chunk[1];
-        const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
-        Cluster cluster_label = m_global_point_offset + point_index + 1;
+#ifdef __ARM_FEATURE_SVE
+
+    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const float EPS2,
+                         const Clusters& clusters, std::vector<uint32_t>& min_points_area, uint32_t& count) const {
+        
+	const uint32_t dimensions = static_cast<uint32_t>(m_data.m_chunk[1]);
+        
+	const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
+        
+	Cluster cluster_label = m_global_point_offset + point_index + 1;
 
 	size_t n = neighboring_points.size();
 
-	std::vector<uint32_t> neighboring_points_u32(neighboring_points.begin(), neighboring_points.end());
-	std::vector<float> results(n);
+	min_points_area = std::vector<uint32_t>(n, INT_MAX);
 
 	const float* neighbouring_points_ptr = static_cast<float*>(m_data.m_p);
-
-	svfloat32_t point_v_x = svdup_n_f32(point[0]);
-
-        svfloat32_t point_v_y = svdup_n_f32(point[1]);
-
-        svfloat32_t point_v_z = svdup_n_f32(point[2]);
 
 	for (size_t i = 0; i < n; i += svcntw()) {
 
             svbool_t pg = svwhilelt_b32(i, n);
-            svuint32_t sv_indices = svld1_u32(pg, &neighboring_points_u32[i]);
-            svuint32_t sv_indices_x = svmul_n_u32_z(pg, sv_indices, dimensions);
-	    svuint32_t sv_indices_y = svadd_n_u32_z(pg, sv_indices_x, 1);
-            svuint32_t sv_indices_z = svadd_n_u32_z(pg, sv_indices_x, 2);
 
-            svfloat32_t loaded_values_x = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_x);
-            svfloat32_t loaded_values_y = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_y);
-            svfloat32_t loaded_values_z = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], sv_indices_z);
+            svuint32_t sv_indices = svld1_u32(pg, &neighboring_points[i]);
 
-	    svfloat32_t vx_diff = svsub_f32_z(pg, point_v_x, loaded_values_x);
+	    svuint32_t sv_indices_scaled = svmul_n_u32_z(pg, sv_indices, dimensions);
 
-            svfloat32_t vy_diff = svsub_f32_z(pg, point_v_y, loaded_values_y);
+	    svfloat32_t results_v = svdup_n_f32(0.0f);
 
-            svfloat32_t vz_diff = svsub_f32_z(pg, point_v_z, loaded_values_z);
+	    for(size_t d = 0; d < dimensions; d++) {
+           
+		svfloat32_t point_coordinate_v = svdup_n_f32(point[d]); 
+	        
+		svuint32_t  other_point_index = svadd_n_u32_z(pg, sv_indices_scaled, d);
+		
+		svfloat32_t other_point_coordinate_v = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], other_point_index);
+		
+		svfloat32_t diff_v = svsub_f32_x(pg, other_point_coordinate_v, point_coordinate_v);
 
-            svfloat32_t vx_diff_square = svmul_f32_z(pg, vx_diff, vx_diff);
+		svfloat32_t diff_square = svmul_f32_x(pg, diff_v, diff_v);
 
-            svfloat32_t vy_diff_square = svmul_f32_z(pg, vy_diff, vy_diff);
+                results_v = svadd_x(pg, results_v, diff_square);
 
-            svfloat32_t vz_diff_square = svmul_f32_z(pg, vz_diff, vz_diff);
+	    }
 
-            svfloat32_t results_v = svadd_z(pg, svadd_z(pg, vx_diff_square, vy_diff_square), vz_diff_square);
+            svbool_t mask = svcmple_n_f32(pg, results_v, EPS2);
 
-            svst1(pg, &results[i], results_v);
+	    count += svcntp_b32(pg, mask);
+
+	    svint32_t cluster_labels_of_neighbours = svld1_gather_u32index_s32(mask, &clusters[0], sv_indices); //load only cluster labels of distances less than ESP2
+
+	    svbool_t not_visited = svcmpne_n_s32(mask, cluster_labels_of_neighbours, NOT_VISITED); //NOT_VISITED_s32 is equal to INT_MAX
+
+	    svbool_t less_than_zero = svcmplt_n_s32(mask, cluster_labels_of_neighbours, 0);
+
+	    svbool_t mask2 = svand_b_z(mask, not_visited, less_than_zero);
+
+	    cluster_labels_of_neighbours = svabs_s32_z(mask2, cluster_labels_of_neighbours);
+
+	    cluster_label = std::min(cluster_label, svminv_s32(mask2, cluster_labels_of_neighbours));
+
+	    svst1_u32(mask, &min_points_area[i], sv_indices);
 
         }
-	
-	// iterate through all neighboring points and check whether they are in range
-        for (size_t i = 0; i < n; i++) {
-            
-	    // .. if in range, add it to the vector with in range points
-            if (results[i] <= EPS2) {
-                const Cluster neighbor_label = clusters[ neighboring_points[i]];
+        
+	return cluster_label;
 
-                min_points_area.push_back(neighboring_points[i]);
-                // if neighbor point has an assigned label and it is a core, determine what label to take
-                if (neighbor_label != NOT_VISITED and neighbor_label < 0) {
-                    cluster_label = std::min(cluster_label, std::abs(neighbor_label));
-                }
-            }
-        }
-
-        return cluster_label;
     }
+
+#endif
 
     Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const double EPS2,
                          const Clusters& clusters, std::vector<size_t>& min_points_area) const {
-        const size_t dimensions = m_data.m_chunk[1];
-        const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
-        Cluster cluster_label = m_global_point_offset + point_index + 1;
+        
+	    const size_t dimensions = m_data.m_chunk[1];
+        
+	const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
+        
+	Cluster cluster_label = m_global_point_offset + point_index + 1;
 
         // iterate through all neighboring points and check whether they are in range
         for (size_t neighbor: neighboring_points) {
@@ -906,8 +911,8 @@ public:
             order_buffer.data(), recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_Types<size_t>::map(),
-            cluster_buffer.data(), recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            clusters.data(), send_counts, send_displs, MPI_Types<int32_t>::map(),
+            cluster_buffer.data(), recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
         );
 
         // assign the new data
