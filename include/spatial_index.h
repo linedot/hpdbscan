@@ -24,6 +24,7 @@
 #include <omp.h>
 #include <parallel/algorithm>
 #include <vector>
+#include <set>
 
 #ifdef WITH_OUTPUT
 #include <iostream>
@@ -201,8 +202,8 @@ private:
         }
 
         // sorting the points and cells out-of-place, memorize the original order
-        //#pragma omp parallel for
-        for (size_t i = 0; i < items; ++i) {
+        #pragma omp parallel for
+	for (size_t i = 0; i < items; ++i) {
             const Cell cell = m_cells[i];
             const auto& locator = m_cell_index[cell];
             const size_t copy_to = locator.first + (offsets[cell]++);
@@ -616,16 +617,23 @@ public:
             #endif
             // compute a global histogram and redistribute the points based on that
             CellHistogram global_histogram = compute_global_histogram();
+            
             compute_bounds(global_histogram);
+
             global_histogram.clear();
-            redistribute_dataset();
+
+	    redistribute_dataset();
             // after the redistribution we have to reindex the new data yet again
             compute_cells();
+
             compute_cell_index();
+
             compute_global_point_offset();
+
             sort_by_cell();
-            #ifdef WITH_OUTPUT
-            if (m_rank == 0) {
+            
+	    #ifdef WITH_OUTPUT
+	    if (m_rank == 0) {
                 std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
             }
             #endif
@@ -810,10 +818,10 @@ public:
 
 #endif
 
-    Cluster region_query(const size_t point_index, const std::vector<size_t>& neighboring_points, const double EPS2,
-                         const Clusters& clusters, std::vector<size_t>& min_points_area) const {
+    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const double EPS2,
+                         const Clusters& clusters, std::vector<uint32_t>& min_points_area,  uint32_t& count) const {
         
-	    const size_t dimensions = m_data.m_chunk[1];
+	const size_t dimensions = m_data.m_chunk[1];
         
 	const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
         
@@ -840,10 +848,81 @@ public:
                 }
             }
         }
+        
+	count = min_points_area.size();
 
         return cluster_label;
     }
 
+#if 0
+    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const double EPS2,
+                         const Clusters& clusters, std::vector<uint32_t>& min_points_area, uint32_t& count) const {
+
+
+	const size_t dimensions = static_cast<size_t>(m_data.m_chunk[1]);
+
+        const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
+
+        Cluster cluster_label = m_global_point_offset + point_index + 1;
+
+        size_t n = neighboring_points.size();
+
+        min_points_area = std::vector<size_t>(n, INT_MAX);
+
+	std::vector<size_t> neighboring_points_u64(neighboring_points.begin(), neighboring_points.end());
+
+        const double* neighbouring_points_ptr = static_cast<double*>(m_data.m_p);
+
+	for (size_t i = 0; i < n; i += svcntd()) {
+
+            svbool_t pg = svwhilelt_b64(i, n);
+
+            svuint64_t sv_indices = svld1_u64(pg, &neighboring_points_u64[i]);
+
+            svuint64_t sv_indices_scaled = svmul_n_u64_z(pg, sv_indices, dimensions);
+
+            svfloat64_t results_v = svdup_n_f64(0.0);
+
+            for(size_t d = 0; d < dimensions; d++) {
+
+                svfloat64_t point_coordinate_v = svdup_n_f64(point[d]);
+
+                svuint64_t  other_point_index = svadd_n_u64_z(pg, sv_indices_scaled, d);
+
+                svfloat64_t other_point_coordinate_v = svld1_gather_u64index_f64(pg, &neighbouring_points_ptr[0], other_point_index);
+
+                svfloat64_t diff_v = svsub_f64_x(pg, other_point_coordinate_v, point_coordinate_v);
+
+                svfloat64_t diff_square = svmul_f64_x(pg, diff_v, diff_v);
+
+                results_v = svadd_x(pg, results_v, diff_square);
+
+            }
+
+            svbool_t mask = svcmple_n_f64(pg, results_v, EPS2);
+
+            count += svcntp_b64(pg, mask);
+
+            svint32_t cluster_labels_of_neighbours = svld1_gather_u32index_s32(mask, &clusters[0], sv_indices); //load only cluster labels of distances less than ESP2
+
+            svbool_t not_visited = svcmpne_n_s32(mask, cluster_labels_of_neighbours, NOT_VISITED); //NOT_VISITED_s32 is equal to INT_MAX
+
+            svbool_t less_than_zero = svcmplt_n_s32(mask, cluster_labels_of_neighbours, 0);
+
+            svbool_t mask2 = svand_b_z(mask, not_visited, less_than_zero);
+
+            cluster_labels_of_neighbours = svabs_s32_z(mask2, cluster_labels_of_neighbours);
+
+            cluster_label = std::min(cluster_label, svminv_s32(mask2, cluster_labels_of_neighbours));
+
+            svst1_u32(mask, &min_points_area[i], sv_indices);
+
+        }
+
+        return cluster_label;
+
+    }
+#endif
     void recover_initial_order(Clusters& clusters) {
         const hsize_t dimensions = m_data.m_chunk[1];
 
