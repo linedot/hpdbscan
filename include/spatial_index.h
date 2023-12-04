@@ -823,14 +823,18 @@ public:
         
 	const size_t dimensions = m_data.m_chunk[1];
         
-	const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
+	const T* point = static_cast<T*>(m_data.m_p) + point_index * dimensions;
         
 	Cluster cluster_label = m_global_point_offset + point_index + 1;
 
+	size_t n = neighboring_points.size();
+
+	min_points_area = std::vector<uint32_t>(n, INT_MAX);
+
         // iterate through all neighboring points and check whether they are in range
         for (size_t neighbor: neighboring_points) {
-            double offset = 0.0;
-            const double* other_point = static_cast<double*>(m_data.m_p) + neighbor * dimensions;
+            T offset = 0.0;
+            const T* other_point = static_cast<T*>(m_data.m_p) + neighbor * dimensions;
 
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
@@ -841,16 +845,16 @@ public:
             if (offset <= EPS2) {
                 const Cluster neighbor_label = clusters[neighbor];
 
-                min_points_area.push_back(neighbor);
+                min_points_area[i] = neighbor;
+
+		count++;
                 // if neighbor point has an assigned label and it is a core, determine what label to take
-                if (neighbor_label != NOT_VISITED and neighbor_label < 0) {
+                if (neighbor_label < 0) {
                     cluster_label = std::min(cluster_label, std::abs(neighbor_label));
                 }
             }
         }
         
-	count = min_points_area.size();
-
         return cluster_label;
     }
 
