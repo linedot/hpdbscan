@@ -106,7 +106,7 @@ class HPDBSCAN {
                     }
 		}
             }
-            else {
+            else if (clusters[point] == NOT_VISITED) {
                 // mark as noise
                 atomic_min(clusters.data() + point, NOISE);
             }
