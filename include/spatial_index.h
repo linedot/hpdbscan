@@ -802,11 +802,9 @@ public:
 
 	    svbool_t less_than_zero = svcmplt_n_s32(mask, cluster_labels_of_neighbours, 0);
 
-	    svbool_t mask2 = svand_b_z(mask, not_visited, less_than_zero);
+	    cluster_labels_of_neighbours = svabs_s32_z(less_than_zero, cluster_labels_of_neighbours);
 
-	    cluster_labels_of_neighbours = svabs_s32_z(mask2, cluster_labels_of_neighbours);
-
-	    cluster_label = std::min(cluster_label, svminv_s32(mask2, cluster_labels_of_neighbours));
+	    cluster_label = std::min(cluster_label, svminv_s32(less_than_zero, cluster_labels_of_neighbours));
 
 	    svst1_u32(mask, &min_points_area[i], sv_indices);
 
