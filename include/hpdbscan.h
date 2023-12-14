@@ -38,7 +38,6 @@
 #include "io.h"
 #include "rules.h"
 #include "spatial_index.h"
-#include <papi.h>
 
 class HPDBSCAN {
     float m_epsilon;

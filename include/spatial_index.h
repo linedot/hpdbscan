@@ -832,9 +832,9 @@ public:
 	min_points_area = std::vector<uint32_t>(n, INT_MAX);
 
         // iterate through all neighboring points and check whether they are in range
-        for (size_t neighbor: neighboring_points) {
+        for (size_t i = 0; i < neighboring_points.size(); i++) {
             T offset = 0.0;
-            const T* other_point = static_cast<T*>(m_data.m_p) + neighbor * dimensions;
+            const T* other_point = static_cast<T*>(m_data.m_p) + neighboring_points[i] * dimensions;
 
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
@@ -843,9 +843,9 @@ public:
             }
             // .. if in range, add it to the vector with in range points
             if (offset <= EPS2) {
-                const Cluster neighbor_label = clusters[neighbor];
+                const Cluster neighbor_label = clusters[neighboring_points[i]];
 
-                min_points_area[i] = neighbor;
+                min_points_area[i] = neighboring_points[i];
 
 		count++;
                 // if neighbor point has an assigned label and it is a core, determine what label to take

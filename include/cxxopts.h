@@ -37,7 +37,7 @@ THE SOFTWARE.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
+#include <limits>
 #ifdef __cpp_lib_optional
 #include <optional>
 #define CXXOPTS_HAS_OPTIONAL
