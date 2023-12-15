@@ -22,7 +22,7 @@
 
 using ssize_t       = ptrdiff_t;
 using Locator       = std::pair<size_t, size_t>;
-using Cluster       = ssize_t;
+using Cluster       = int32_t;
 using Clusters      = std::vector<Cluster>;
 using Cell          = size_t;
 using Cells         = std::vector<Cell>;
@@ -33,8 +33,8 @@ using ComputeBounds = std::array<size_t, 2>;
 using Cuts          = std::vector<Locator>;
 
 static const size_t  BITS_PER_BYTE = 8;
-static const ssize_t NOT_VISITED   = std::numeric_limits<ssize_t>::max();
-static const ssize_t NOISE         = std::numeric_limits<ssize_t>::max() - 1;
+static const int32_t NOT_VISITED   = std::numeric_limits<int32_t>::max();
+static const int32_t NOISE         = std::numeric_limits<int32_t>::max() - 1;
 
 const std::vector<size_t> RADIX_POWERS = {
         1,

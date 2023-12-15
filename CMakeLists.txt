@@ -6,7 +6,7 @@ SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/)
 
 # set c++ properties
 ENABLE_LANGUAGE(CXX)
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 17)
 
 # set build options
 SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra")
