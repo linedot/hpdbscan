@@ -123,7 +123,11 @@ public:
         return dataset;
     }
 
-    static void write_hdf5(const std::string& path, const std::string& dataset_name, Clusters& clusters) {
+    template<typename index_type>
+    static void write_hdf5(
+            const std::string& path,
+            const std::string& dataset_name, 
+            Clusters<index_type>& clusters) {
         #ifdef WITH_MPI
         int rank, size;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -163,7 +167,8 @@ public:
 
         // create the dataset
         hid_t data_space = H5Screate_simple(1, &total_count, nullptr);
-        H5Dcreate1(file_handle, dataset_name.c_str(), H5T_NATIVE_LONG, data_space, H5P_DEFAULT);
+        H5Dcreate1(file_handle, dataset_name.c_str(), 
+                H5T_NATIVE_LONG, data_space, H5P_DEFAULT);
 
         // ... dataset already exists, previous call fails, just open the existing one
         hid_t dataset_handle = H5Dopen1(file_handle, dataset_name.c_str());

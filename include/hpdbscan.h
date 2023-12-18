@@ -16,12 +16,14 @@
 
 #include <cmath>
 #include <cstdint>
-#include <hdf5.h>
 #include <iomanip>
-#include <omp.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_set>
+
+#include <omp.h>
+#include <hdf5.h>
 
 #ifdef WITH_MPI
 #include <mpi.h>
@@ -48,16 +50,17 @@ class HPDBSCAN {
     int m_size;
     #endif
 
-    template <typename T>
-    Rules local_dbscan(Clusters& clusters, const SpatialIndex<T>& index) {
+
+    template <typename data_type, typename index_type>
+    Rules<index_type> local_dbscan(Clusters<index_type>& clusters, const SpatialIndex<data_type>& index) {
         const float EPS2 = m_epsilon * m_epsilon;
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
 
 
-        Rules rules;
-        Cell previous_cell = NOT_VISITED;
-        std::vector<uint32_t> neighboring_points;
+        Rules<index_type> rules;
+        Cell previous_cell = NOT_VISITED<index_type>;
+        std::vector<index_type> neighboring_points;
 
 #if 0
         int retval;
@@ -73,42 +76,44 @@ class HPDBSCAN {
 #endif
         // local DBSCAN run
         #pragma omp parallel for schedule(dynamic, 2048) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
-        for (uint32_t point = lower; point < upper; ++point) {
+        for (index_type point = lower; static_cast<size_t>(point) < upper; ++point) {
             // small optimization, we only perform a neighborhood query if it is a new cell
             Cell current_cell = index.cell_of(point);
 
             if (current_cell != previous_cell) {
-                neighboring_points = index.get_neighbors(current_cell);
+                neighboring_points = index.template get_neighbors<index_type>(current_cell);
                 previous_cell = current_cell;
             }
 
-            std::vector<uint32_t> min_points_area;
-	    uint32_t count = 0;
-            Cluster cluster_label = NOISE;
+            std::vector<index_type> min_points_area;
+	        index_type count = 0;
+            Cluster<index_type> cluster_label = NOISE<index_type>;
             if (neighboring_points.size() >= m_min_points) {
                 cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area, count);
             }
 
-            if (count >= m_min_points) {
+            if (static_cast<size_t>(count) >= m_min_points) {
                 // set the label to be negative as to mark it as core point
-                atomic_min(clusters.data() + point, -cluster_label);
+                // NOTE: unary operator promotes shorter types to int, so explicitly cast
+                atomic_min(clusters.data() + point, 
+                        static_cast<Cluster<index_type>>(-cluster_label));
 
                 for (auto& other : min_points_area) {
 
-		    if(other != INT_MAX) {
-                    // get the absolute value here, we are only interested what cluster it is not in the core property
-                    // check whether the other point is a cluster
+                    if(other != NOT_VISITED<index_type>) {
+                        // get the absolute value here, we are only interested what cluster it is not in the core property
+                        // check whether the other point is a cluster
                         if (clusters[other] < 0) {
                             rules.update(std::abs(clusters[other]), cluster_label);
                         }
-                    // mark as a border point
+                        // mark as a border point
                         atomic_min(clusters.data() + other, cluster_label);
                     }
-		}
+                }
             }
-            else if (clusters[point] == NOT_VISITED) {
+            else if (clusters[point] == NOT_VISITED<index_type>) {
                 // mark as noise
-                atomic_min(clusters.data() + point, NOISE);
+                atomic_min(clusters.data() + point, NOISE<index_type>);
             }
         }
 
@@ -133,8 +138,8 @@ class HPDBSCAN {
     }
 
     #ifdef WITH_MPI
-    template <typename T>
-    void merge_halos(Clusters& clusters, Rules& rules, const SpatialIndex<T>& index) {
+    template <typename data_type, typename index_type>
+    void merge_halos(Clusters<index_type>& clusters, Rules<index_type>& rules, const SpatialIndex<data_type>& index) {
         Cuts cuts = index.compute_cuts();
 
         // exchange the number of points in the halos
@@ -143,7 +148,8 @@ class HPDBSCAN {
         for (size_t i = 0; i < cuts.size(); ++i) {
             send_counts[i] = static_cast<int>(cuts[i].second - cuts[i].first);
         }
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts, 1, get_mpi_type<index_type>(),
+                     recv_counts, 1, get_mpi_type<index_type>(), MPI_COMM_WORLD);
 
         // accumulate the numbers of points from each node
         int send_displs[m_size];
@@ -158,11 +164,11 @@ class HPDBSCAN {
         // create a buffer for the incoming cluster labels and exchange them
         const size_t upper_halo_bound = index.upper_halo_bound();
         const size_t lower_halo_bound = index.lower_halo_bound();
-        Cluster halo_labels[total_items_to_receive];
+        Cluster<index_type> halo_labels[total_items_to_receive];
 
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_INT,
-            halo_labels, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
+            clusters.data(), send_counts, send_displs, get_mpi_type<index_type>(),
+            halo_labels,     recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
 
         // update the local clusters with the received information
@@ -171,12 +177,15 @@ class HPDBSCAN {
 
             for (int j = 0; j < recv_counts[i]; ++j) {
                 const size_t index = j + offset;
-                const Cluster own_cluster = clusters[index];
-                const Cluster halo_cluster = halo_labels[j + recv_displs[i]];
+                const Cluster<index_type> own_cluster = clusters[index];
+                const Cluster<index_type> halo_cluster = halo_labels[j + recv_displs[i]];
 
                 // incoming cluster label is core point, update it
                 if (own_cluster < 0) {
-                    const std::pair<Cluster, Cluster> minmax = std::minmax(std::abs(own_cluster), halo_cluster);
+                    const std::pair<Cluster<index_type>, Cluster<index_type>> minmax = 
+                        std::minmax(
+                                static_cast<Cluster<index_type>>(std::abs(own_cluster)),
+                                halo_cluster);
                     rules.update(minmax.second, minmax.first);
                 } else {
                     atomic_min(&clusters[index], halo_cluster);
@@ -185,7 +194,8 @@ class HPDBSCAN {
         }
     }
 
-    void distribute_rules(Rules& rules) {
+    template<typename index_type>
+    void distribute_rules(Rules<index_type>& rules) {
         const int number_of_rules = static_cast<int>(rules.size());
 
         // determine how many rules each rank will send
@@ -198,7 +208,8 @@ class HPDBSCAN {
             send_counts[i] = 2 * number_of_rules;
             send_displs[i] = 0;
         }
-        MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts, 1, get_mpi_type<index_type>(),
+                     recv_counts, 1, get_mpi_type<index_type>(), MPI_COMM_WORLD);
 
         // ... based on that calculate the displacements into the receive buffer
         size_t total = 0;
@@ -208,7 +219,7 @@ class HPDBSCAN {
         }
 
         // serialize the rules
-        Cluster serialized_rules[send_counts[m_rank]];
+        Cluster<index_type> serialized_rules[send_counts[m_rank]];
         size_t index = 0;
         for (const auto& rule : rules) {
             serialized_rules[index++] = rule.first;
@@ -216,10 +227,10 @@ class HPDBSCAN {
         }
 
         // exchange the rules and update the own rules
-        Cluster incoming_rules[total];
+        Cluster<index_type> incoming_rules[total];
         MPI_Alltoallv(
-            serialized_rules, send_counts, send_displs, MPI_INT,
-            incoming_rules, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
+            serialized_rules, send_counts, send_displs, get_mpi_type<index_type>(),
+            incoming_rules,   recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
@@ -227,14 +238,15 @@ class HPDBSCAN {
     }
     #endif
 
-    void apply_rules(Clusters& clusters, const Rules& rules) {
+    template<typename index_type>
+    void apply_rules(Clusters<index_type>& clusters, const Rules<index_type>& rules) {
         #pragma omp parallel for
         for (size_t i = 0; i < clusters.size(); ++i) {
             const bool is_core = clusters[i] < 0;
-            Cluster cluster = std::abs(clusters[i]);
-            Cluster matching_rule = rules.rule(cluster);
+            Cluster<index_type> cluster = std::abs(clusters[i]);
+            Cluster<index_type> matching_rule = rules.rule(cluster);
 
-            while (matching_rule < NOISE) {
+            while (matching_rule < NOISE<index_type>) {
                 cluster = matching_rule;
                 matching_rule = rules.rule(matching_rule);
             }
@@ -243,15 +255,16 @@ class HPDBSCAN {
     }
 
     #ifdef WITH_OUTPUT
-    void summarize(const Dataset& dataset, const Clusters& clusters) const {
-        std::unordered_set<Cluster> unique_clusters;
+    template<typename index_type>
+    void summarize(const Dataset& dataset, const Clusters<index_type>& clusters) const {
+        std::unordered_set<Cluster<index_type>> unique_clusters;
         size_t cluster_points = 0;
         size_t core_points = 0;
         size_t noise_points = 0;
 
         // iterate through the points and sum up the
         for (size_t i = 0; i < dataset.m_chunk[0]; ++i) {
-            const Cluster cluster = clusters[i];
+            const Cluster<index_type> cluster = clusters[i];
             unique_clusters.insert(std::abs(cluster));
 
             if (cluster == 0) {
@@ -275,11 +288,12 @@ class HPDBSCAN {
         std::cout << "Summary..." << std::endl;
         #ifdef WITH_MPI
         }
-        MPI_Gather(&number_of_unique_clusters, 1, MPI_INT, set_counts, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Gather(&number_of_unique_clusters, 1, get_mpi_type<index_type>(), 
+                   set_counts, 1, get_mpi_type<index_type>(), 0, MPI_COMM_WORLD);
 
         // allocate the buffers for the serialized sets
-        Clusters global_buffer;
-        Clusters local_buffer(number_of_unique_clusters);
+        Clusters<index_type> global_buffer;
+        Clusters<index_type> local_buffer(number_of_unique_clusters);
         std::copy(unique_clusters.begin(), unique_clusters.end(), local_buffer.begin());
 
         // sum up the total number of elements on the MPI root to determine the global buffer size
@@ -294,8 +308,8 @@ class HPDBSCAN {
 
         // collect the individual unique clusters on the MPI root into a global buffer
         MPI_Gatherv(
-            local_buffer.data(), number_of_unique_clusters, MPI_INT,
-            global_buffer.data(), set_counts, set_displs, MPI_INT, 0, MPI_COMM_WORLD
+            local_buffer.data(), number_of_unique_clusters, get_mpi_type<index_type>(),
+            global_buffer.data(), set_counts, set_displs, get_mpi_type<index_type>(), 0, MPI_COMM_WORLD
         );
         // accumulate the metrics of each node
         MPI_Reduce(
@@ -329,11 +343,13 @@ public:
         }
     }
 
-    Clusters cluster(const std::string& path, const std::string& dataset) {
-        return cluster(path, dataset, omp_get_max_threads());
+    template<typename index_type>
+    Clusters<index_type> cluster(const std::string& path, const std::string& dataset) {
+        return cluster<index_type>(path, dataset, omp_get_max_threads());
     }
 
-    Clusters cluster(const std::string& path, const std::string& dataset, int threads) {
+    template<typename index_type>
+    Clusters<index_type> cluster(const std::string& path, const std::string& dataset, int threads) {
         // read in the data
         Dataset data = IO::read_hdf5(path, dataset);
 
@@ -348,26 +364,26 @@ public:
             // signed
             if (sign == H5T_SGN_2) {
                 if (precision == 8) {
-                    return cluster<int8_t>(data, threads);
+                    return cluster<int8_t, index_type>(data, threads);
                 } else if (precision == 16) {
-                    return cluster<int16_t>(data, threads);
+                    return cluster<int16_t, index_type>(data, threads);
                 } else if (precision == 32) {
-                    return cluster<int32_t>(data, threads);
+                    return cluster<int32_t, index_type>(data, threads);
                 } else if (precision == 64) {
-                    return cluster<int64_t>(data, threads);
+                    return cluster<int64_t, index_type>(data, threads);
                 } else {
                     throw std::invalid_argument("Unsupported signed integer precision");
                 }
             // unsigned
             } else {
                 if (precision == 8) {
-                    return cluster<uint8_t>(data, threads);
+                    return cluster<uint8_t, index_type>(data, threads);
                 } else if (precision == 16) {
-                    return cluster<uint16_t>(data, threads);
+                    return cluster<uint16_t, index_type>(data, threads);
                 } else if (precision == 32) {
-                    return cluster<uint32_t>(data, threads);
+                    return cluster<uint32_t, index_type>(data, threads);
                 } else if (precision == 64) {
-                    return cluster<uint64_t>(data, threads);
+                    return cluster<uint64_t, index_type>(data, threads);
                 } else {
                     throw std::invalid_argument("Unsupported unsigned integer precision");
                 }
@@ -375,9 +391,15 @@ public:
         // floating point
         } else if (type_class == H5T_FLOAT) {
             if (precision == 32) {
-                return cluster<float>(data, threads);
+                #ifdef WITH_OUTPUT
+                std::cout << "fp32 data\n";
+                #endif
+                return cluster<float, index_type>(data, threads);
             } else if (precision == 64) {
-                return cluster<double>(data, threads);
+                #ifdef WITH_OUTPUT
+                std::cout << "fp64 data\n";
+                #endif
+                return cluster<double, index_type>(data, threads);
             } else {
                 throw std::invalid_argument("Unsupported floating point precision");
             }
@@ -387,8 +409,8 @@ public:
         }
     }
 
-    template <typename T>
-    Clusters cluster(Dataset& dataset, int threads=omp_get_max_threads()) {
+    template <typename data_type, typename index_type>
+    Clusters<index_type> cluster(Dataset& dataset, int threads=omp_get_max_threads()) {
         #ifdef WITH_OUTPUT
         double execution_start = omp_get_wtime();
         #endif
@@ -401,9 +423,9 @@ public:
         #endif
 
         // initialize the feature indexer
-        SpatialIndex<T> index(dataset, m_epsilon);
+        SpatialIndex<data_type> index(dataset, m_epsilon);
         // initialize the clusters array
-        Clusters clusters(dataset.m_chunk[0], NOT_VISITED);
+        Clusters<index_type> clusters(dataset.m_chunk[0], NOT_VISITED<index_type>);
 
         // run the first local clustering round
         #ifdef WITH_OUTPUT
@@ -438,7 +460,7 @@ public:
             }
             #endif
             merge_halos(clusters, rules, index);
-            distribute_rules(rules);
+            distribute_rules<index_type>(rules);
             #ifdef WITH_OUTPUT
             if (m_rank == 0) {
                 std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
@@ -504,17 +526,17 @@ public:
         return clusters;
     }
 
-    template <typename T>
-    Clusters cluster(T* data, int dim0, int dim1, int threads) {
+    template <typename data_type, typename index_type>
+    Clusters<index_type> cluster(data_type* data, int dim0, int dim1, int threads) {
         hsize_t chunk[2] = {static_cast<hsize_t>(dim0), static_cast<hsize_t>(dim1)};
-        Dataset dataset(data, chunk, HDF5_Types<T>::map());
+        Dataset dataset(data, chunk, get_hdf5_type<data_type>());
 
-        return cluster<T>(dataset, threads);
+        return cluster<data_type, index_type>(dataset, threads);
     }
 
-    template <typename T>
-    Clusters cluster(T* data, int dim0, int dim1) {
-        return cluster(data, dim0, dim1, omp_get_max_threads());
+    template <typename data_type, typename index_type>
+    Clusters<index_type> cluster(data_type* data, int dim0, int dim1) {
+        return cluster<data_type, index_type>(data, dim0, dim1, omp_get_max_threads());
     }
 };
 

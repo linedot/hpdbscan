@@ -33,22 +33,18 @@
 #include "constants.h"
 #include "dataset.h"
 
-#ifdef __ARM_FEATURE_SVE
-#include <arm_sve.h>
-#endif /* __ARM_FEATURE_SVE */
-
 #ifdef WITH_MPI
 #include <mpi.h>
 #include "mpi_util.h"
 #endif
 
-template <typename T>
+template <typename data_type>
 class SpatialIndex {
     Dataset&                   m_data;
     const float                m_epsilon;
 
-    std::vector<T>             m_minimums;
-    std::vector<T>             m_maximums;
+    std::vector<data_type>             m_minimums;
+    std::vector<data_type>             m_maximums;
 
     std::vector<size_t>        m_cell_dimensions;
     size_t                     m_total_cells;
@@ -72,19 +68,19 @@ class SpatialIndex {
 
 public:
     // implementations of the custom omp reduction operations
-    static void vector_min(std::vector<T>& omp_in, std::vector<T>& omp_out) {
+    static void vector_min(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::min(omp_in[index], omp_out[index]);
         }
     }
-    #pragma omp declare reduction(vector_min: std::vector<T>: vector_min(omp_in, omp_out)) initializer(omp_priv = omp_orig)
+    #pragma omp declare reduction(vector_min: std::vector<data_type>: vector_min(omp_in, omp_out)) initializer(omp_priv = omp_orig)
 
-    static void vector_max(std::vector<T>& omp_in, std::vector<T>& omp_out) {
+    static void vector_max(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::max(omp_in[index], omp_out[index]);
         }
     }
-    #pragma omp declare reduction(vector_max: std::vector<T>: vector_max(omp_in, omp_out)) initializer(omp_priv = omp_orig)
+    #pragma omp declare reduction(vector_max: std::vector<data_type>: vector_max(omp_in, omp_out)) initializer(omp_priv = omp_orig)
 
     static void merge_histograms(CellHistogram& omp_in, CellHistogram& omp_out) {
         for (const auto& cell: omp_in) {
@@ -104,16 +100,16 @@ private:
     void compute_space_dimensions() {
         const size_t dimensions = m_minimums.size();
         const size_t bytes = m_cells.size() * dimensions;
-        const T* end_point = static_cast<T*>(m_data.m_p) + bytes;
+        const data_type* end_point = static_cast<data_type*>(m_data.m_p) + bytes;
 
         // compute the local feature space minimums and maximums in parallel
         auto& minimums = m_minimums;
         auto& maximums = m_maximums;
 
         #pragma omp parallel for reduction(vector_min: minimums) reduction(vector_max: maximums)
-        for (T* point = static_cast<T*>(m_data.m_p); point < end_point; point += dimensions) {
+        for (data_type* point = static_cast<data_type*>(m_data.m_p); point < end_point; point += dimensions) {
             for (size_t d = 0; d < dimensions; ++d) {
-                const T& coordinate = point[d];
+                const data_type& coordinate = point[d];
                 minimums[d] = std::min(minimums[d], coordinate);
                 maximums[d] = std::max(maximums[d], coordinate);
             }
@@ -121,8 +117,8 @@ private:
 
         // exchange globally, if necessary
         #ifdef WITH_MPI
-        MPI_Allreduce(MPI_IN_PLACE, m_minimums.data(), dimensions, MPI_Types<T>::map(), MPI_MIN, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, m_maximums.data(), dimensions, MPI_Types<T>::map(), MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, m_minimums.data(), dimensions, get_mpi_type<data_type>(), MPI_MIN, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, m_maximums.data(), dimensions, get_mpi_type<data_type>(), MPI_MAX, MPI_COMM_WORLD);
         #endif
     }
 
@@ -152,7 +148,7 @@ private:
 
         #pragma omp parallel for reduction(merge_histograms: histogram)
         for (size_t i = 0; i < m_data.m_chunk[0]; ++i) {
-            const T* point = static_cast<T*>(m_data.m_p) + i * dimensions;
+            const data_type* point = static_cast<data_type*>(m_data.m_p) + i * dimensions;
 
             size_t cell = 0;
             size_t accumulator = 1;
@@ -193,7 +189,7 @@ private:
         // initialize out-of-place buffers
         Cells reordered_cells(items);
         std::vector<size_t> reordered_indices(items);
-        std::vector<T> reordered_points(items * dimensions);
+        std::vector<data_type> reordered_points(items * dimensions);
 
         // memory for offset of already placed items
         std::unordered_map<Cell, std::atomic<size_t>> offsets;
@@ -211,14 +207,14 @@ private:
             reordered_cells[copy_to] = m_cells[i];
             reordered_indices[copy_to] = m_initial_order[i];
             for (size_t d = 0; d < dimensions; ++d) {
-                reordered_points[copy_to * dimensions + d] = static_cast<T*>(m_data.m_p)[i * dimensions + d];
+                reordered_points[copy_to * dimensions + d] = static_cast<data_type*>(m_data.m_p)[i * dimensions + d];
             }
         }
 
         // move the out-of-place results into the correct in-place buffers
         m_cells.swap(reordered_cells);
         m_initial_order.swap(reordered_indices);
-        std::copy(reordered_points.begin(), reordered_points.end(), static_cast<T*>(m_data.m_p));
+        std::copy(reordered_points.begin(), reordered_points.end(), static_cast<data_type*>(m_data.m_p));
     }
 
     #ifdef WITH_MPI
@@ -427,13 +423,13 @@ private:
         }
 
         // allocate new buffers for the points and the order vectors
-        T* point_buffer = new T[total_recv_items];
+        data_type* point_buffer = new data_type[total_recv_items];
         std::vector<size_t> order_buffer(total_recv_items / dimensions);
 
         // actually transmit the data
         MPI_Alltoallv(
-            static_cast<T*>(m_data.m_p), send_counts, send_displs, MPI_Types<T>::map(),
-            point_buffer, recv_counts, recv_displs, MPI_Types<T>::map(), MPI_COMM_WORLD
+            static_cast<data_type*>(m_data.m_p), send_counts, send_displs, get_mpi_type<data_type>(),
+            point_buffer,                        recv_counts, recv_displs, get_mpi_type<data_type>(), MPI_COMM_WORLD
         );
         MPI_Alltoallv(
             m_initial_order.data(), send_counts_labels, send_displs_labels, MPI_UNSIGNED_LONG,
@@ -441,7 +437,7 @@ private:
         );
 
         // clean up the previous data
-        delete[] static_cast<T*>(m_data.m_p);
+        delete[] static_cast<data_type*>(m_data.m_p);
         m_cells.clear();
         m_cell_index.clear();
 
@@ -459,7 +455,8 @@ private:
         if (m_rank == 0) m_global_point_offset = 0;
     }
 
-    void sort_by_order(Clusters& clusters) {
+    template<typename index_type>
+    void sort_by_order(Clusters<index_type>& clusters) {
         // allocate the radix buckets
         const size_t maximum_digit_count = static_cast<size_t>(std::ceil(std::log10(m_data.m_shape[0])));
         std::vector<std::vector<size_t>> buckets(maximum_digit_count, std::vector<size_t>(RADIX_BUCKETS));
@@ -489,9 +486,9 @@ private:
 
         // actually reorder the points out-of-place
         const hsize_t dimensions = m_data.m_chunk[1];
-        Clusters cluster_buffer(items);
+        Clusters<index_type> cluster_buffer(items);
         std::vector<size_t> order_buffer(items);
-        T* point_buffer = new T[items * dimensions];
+        data_type* point_buffer = new data_type[items * dimensions];
 
         for (size_t j = 0; j < maximum_digit_count; ++j) {
             const size_t base = RADIX_POWERS[j];
@@ -505,14 +502,14 @@ private:
                 order_buffer[pos] = m_initial_order[i + lower_bound];
                 cluster_buffer[pos] = clusters[i + lower_bound];
                 for (size_t d = 0; d < dimensions; ++d) {
-                    point_buffer[pos * dimensions + d] = static_cast<T*>(m_data.m_p)[i * dimensions + d + point_offset];
+                    point_buffer[pos * dimensions + d] = static_cast<data_type*>(m_data.m_p)[i * dimensions + d + point_offset];
                 }
             }
 
             // swap the buffers
             clusters.swap(cluster_buffer);
             m_initial_order.swap(order_buffer);
-            T* temp = static_cast<T*>(m_data.m_p);
+            data_type* temp = static_cast<data_type*>(m_data.m_p);
             m_data.m_p = point_buffer;
             point_buffer = temp;
 
@@ -534,8 +531,8 @@ public:
     SpatialIndex(Dataset& data, const float epsilon)
       : m_data(data),
         m_epsilon(epsilon),
-        m_minimums(data.m_chunk[1], std::numeric_limits<T>::max()),
-        m_maximums(data.m_chunk[1], std::numeric_limits<T>::min()),
+        m_minimums(data.m_chunk[1], std::numeric_limits<data_type>::max()),
+        m_maximums(data.m_chunk[1], std::numeric_limits<data_type>::min()),
         m_cell_dimensions(data.m_chunk[1], 0),
         m_total_cells(1),
         m_last_cell(0),
@@ -692,7 +689,8 @@ public:
         return m_cells[index];
     }
 
-    std::vector<uint32_t> get_neighbors(const Cell cell) const {
+    template<typename index_type>
+    std::vector<index_type> get_neighbors(const Cell cell) const {
         const hsize_t dimensions = m_data.m_chunk[1];
 
         // allocate some space for the neighboring cells, be pessimistic and reserve 3^dims for possibly all neighbors
@@ -731,7 +729,7 @@ public:
         }
 
         // copy the points from the neighboring cells over
-        std::vector<uint32_t> neighboring_points;
+        std::vector<index_type> neighboring_points;
         neighboring_points.reserve(number_of_points);
 
         for (size_t neighbor_cell : neighboring_cells) {
@@ -749,106 +747,55 @@ public:
         return neighboring_points;
     }
 
-#ifdef __ARM_FEATURE_SVE
+    template<typename index_type>
+    Cluster<index_type> region_query_optimized(
+            const index_type point_index, 
+            const std::vector<index_type>& neighboring_points,
+            const data_type EPS2,
+            const Clusters<index_type>& clusters,
+            std::vector<index_type>& min_points_area,
+            index_type& count) const;
 
-    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const float EPS2,
-                         const Clusters& clusters, std::vector<uint32_t>& min_points_area, uint32_t& count) const {
-        
-	const uint32_t dimensions = static_cast<uint32_t>(m_data.m_chunk[1]);
-        
-	const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
-        
-	Cluster cluster_label = m_global_point_offset + point_index + 1;
-
-	size_t n = neighboring_points.size();
-
-	min_points_area = std::vector<uint32_t>(n, INT_MAX);
-
-	const float* neighbouring_points_ptr = static_cast<float*>(m_data.m_p);
-
-	for (size_t i = 0; i < n; i += svcntw()) {
-
-            svbool_t pg = svwhilelt_b32(i, n);
-
-            svuint32_t sv_indices = svld1_u32(pg, &neighboring_points[i]);
-
-	    svuint32_t sv_indices_scaled = svmul_n_u32_z(pg, sv_indices, dimensions);
-
-	    svfloat32_t results_v = svdup_n_f32(0.0f);
-
-	    for(size_t d = 0; d < dimensions; d++) {
-           
-		svfloat32_t point_coordinate_v = svdup_n_f32(point[d]); 
-	        
-		svuint32_t  other_point_index = svadd_n_u32_z(pg, sv_indices_scaled, d);
-		
-		svfloat32_t other_point_coordinate_v = svld1_gather_u32index_f32(pg, &neighbouring_points_ptr[0], other_point_index);
-		
-		svfloat32_t diff_v = svsub_f32_x(pg, other_point_coordinate_v, point_coordinate_v);
-
-		svfloat32_t diff_square = svmul_f32_x(pg, diff_v, diff_v);
-
-                results_v = svadd_x(pg, results_v, diff_square);
-
-	    }
-
-            svbool_t mask = svcmple_n_f32(pg, results_v, EPS2);
-
-	    count += svcntp_b32(pg, mask);
-
-	    svint32_t cluster_labels_of_neighbours = svld1_gather_u32index_s32(mask, &clusters[0], sv_indices); //load only cluster labels of distances less than ESP2
-
-	    svbool_t not_visited = svcmpne_n_s32(mask, cluster_labels_of_neighbours, NOT_VISITED); //NOT_VISITED_s32 is equal to INT_MAX
-
-	    svbool_t less_than_zero = svcmplt_n_s32(mask, cluster_labels_of_neighbours, 0);
-
-	    cluster_labels_of_neighbours = svabs_s32_z(less_than_zero, cluster_labels_of_neighbours);
-
-	    cluster_label = std::min(cluster_label, svminv_s32(less_than_zero, cluster_labels_of_neighbours));
-
-	    svst1_u32(mask, &min_points_area[i], sv_indices);
-
-        }
-        
-	return cluster_label;
-
-    }
-
-#endif
-
-    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const double EPS2,
-                         const Clusters& clusters, std::vector<uint32_t>& min_points_area,  uint32_t& count) const {
+    template<typename index_type>
+    Cluster<index_type> region_query(
+            const index_type point_index, 
+            const std::vector<index_type>& neighboring_points,
+            const data_type EPS2,
+            const Clusters<index_type>& clusters,
+            std::vector<index_type>& min_points_area,
+            index_type& count) const {
         
 	const size_t dimensions = m_data.m_chunk[1];
         
-	const T* point = static_cast<T*>(m_data.m_p) + point_index * dimensions;
+	const data_type* point = static_cast<data_type*>(m_data.m_p) + point_index * dimensions;
         
-	Cluster cluster_label = m_global_point_offset + point_index + 1;
+	Cluster<index_type> cluster_label = m_global_point_offset + point_index + 1;
 
 	size_t n = neighboring_points.size();
 
-	min_points_area = std::vector<uint32_t>(n, INT_MAX);
+	min_points_area = std::vector<index_type>(n, NOT_VISITED<index_type>);
 
         // iterate through all neighboring points and check whether they are in range
         for (size_t i = 0; i < neighboring_points.size(); i++) {
-            T offset = 0.0;
-            const T* other_point = static_cast<T*>(m_data.m_p) + neighboring_points[i] * dimensions;
+            data_type offset = 0.0;
+            const data_type* other_point = static_cast<data_type*>(m_data.m_p) + neighboring_points[i] * dimensions;
 
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
-                const T distance = point[d] - other_point[d];
+                const data_type distance = point[d] - other_point[d];
                 offset += distance * distance;
             }
             // .. if in range, add it to the vector with in range points
             if (offset <= EPS2) {
-                const Cluster neighbor_label = clusters[neighboring_points[i]];
+                const Cluster<index_type> neighbor_label = clusters[neighboring_points[i]];
 
                 min_points_area[i] = neighboring_points[i];
 
 		count++;
                 // if neighbor point has an assigned label and it is a core, determine what label to take
                 if (neighbor_label < 0) {
-                    cluster_label = std::min(cluster_label, std::abs(neighbor_label));
+                    cluster_label = std::min(cluster_label, 
+                            static_cast<Cluster<index_type>>(std::abs(neighbor_label)));
                 }
             }
         }
@@ -856,76 +803,8 @@ public:
         return cluster_label;
     }
 
-#if 0
-    Cluster region_query(const uint32_t point_index, const std::vector<uint32_t>& neighboring_points, const double EPS2,
-                         const Clusters& clusters, std::vector<uint32_t>& min_points_area, uint32_t& count) const {
-
-
-	const size_t dimensions = static_cast<size_t>(m_data.m_chunk[1]);
-
-        const double* point = static_cast<double*>(m_data.m_p) + point_index * dimensions;
-
-        Cluster cluster_label = m_global_point_offset + point_index + 1;
-
-        size_t n = neighboring_points.size();
-
-        min_points_area = std::vector<size_t>(n, INT_MAX);
-
-	std::vector<size_t> neighboring_points_u64(neighboring_points.begin(), neighboring_points.end());
-
-        const double* neighbouring_points_ptr = static_cast<double*>(m_data.m_p);
-
-	for (size_t i = 0; i < n; i += svcntd()) {
-
-            svbool_t pg = svwhilelt_b64(i, n);
-
-            svuint64_t sv_indices = svld1_u64(pg, &neighboring_points_u64[i]);
-
-            svuint64_t sv_indices_scaled = svmul_n_u64_z(pg, sv_indices, dimensions);
-
-            svfloat64_t results_v = svdup_n_f64(0.0);
-
-            for(size_t d = 0; d < dimensions; d++) {
-
-                svfloat64_t point_coordinate_v = svdup_n_f64(point[d]);
-
-                svuint64_t  other_point_index = svadd_n_u64_z(pg, sv_indices_scaled, d);
-
-                svfloat64_t other_point_coordinate_v = svld1_gather_u64index_f64(pg, &neighbouring_points_ptr[0], other_point_index);
-
-                svfloat64_t diff_v = svsub_f64_x(pg, other_point_coordinate_v, point_coordinate_v);
-
-                svfloat64_t diff_square = svmul_f64_x(pg, diff_v, diff_v);
-
-                results_v = svadd_x(pg, results_v, diff_square);
-
-            }
-
-            svbool_t mask = svcmple_n_f64(pg, results_v, EPS2);
-
-            count += svcntp_b64(pg, mask);
-
-            svint32_t cluster_labels_of_neighbours = svld1_gather_u32index_s32(mask, &clusters[0], sv_indices); //load only cluster labels of distances less than ESP2
-
-            svbool_t not_visited = svcmpne_n_s32(mask, cluster_labels_of_neighbours, NOT_VISITED); //NOT_VISITED_s32 is equal to INT_MAX
-
-            svbool_t less_than_zero = svcmplt_n_s32(mask, cluster_labels_of_neighbours, 0);
-
-            svbool_t mask2 = svand_b_z(mask, not_visited, less_than_zero);
-
-            cluster_labels_of_neighbours = svabs_s32_z(mask2, cluster_labels_of_neighbours);
-
-            cluster_label = std::min(cluster_label, svminv_s32(mask2, cluster_labels_of_neighbours));
-
-            svst1_u32(mask, &min_points_area[i], sv_indices);
-
-        }
-
-        return cluster_label;
-
-    }
-#endif
-    void recover_initial_order(Clusters& clusters) {
+    template<typename index_type>
+    void recover_initial_order(Clusters<index_type>& clusters) {
         const hsize_t dimensions = m_data.m_chunk[1];
 
         #ifdef WITH_MPI
@@ -978,26 +857,27 @@ public:
         }
 
         // allocate new buffers for the points and the order vectors
-        T* point_buffer = new T[total_recv_items * dimensions];
+        data_type* point_buffer = new data_type[total_recv_items * dimensions];
         std::vector<size_t> order_buffer(total_recv_items);
-        Clusters cluster_buffer(total_recv_items);
+        Clusters<index_type> cluster_buffer(total_recv_items);
 
         // actually transmit the data
         MPI_Alltoallv(
-            static_cast<T*>(m_data.m_p), send_counts_points, send_displs_points, MPI_Types<T>::map(),
-            point_buffer, recv_counts_points, recv_displs_points, MPI_Types<T>::map(), MPI_COMM_WORLD
+            static_cast<data_type*>(m_data.m_p), send_counts_points, send_displs_points, get_mpi_type<data_type>(),
+            point_buffer,                        recv_counts_points, recv_displs_points, get_mpi_type<data_type>(),
+            MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            m_initial_order.data(), send_counts, send_displs, MPI_Types<size_t>::map(),
-            order_buffer.data(), recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            m_initial_order.data(), send_counts, send_displs, get_mpi_type<size_t>(),
+            order_buffer.data(),    recv_counts, recv_displs, get_mpi_type<size_t>(), MPI_COMM_WORLD
         );
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_Types<int32_t>::map(),
-            cluster_buffer.data(), recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
+            clusters.data(),       send_counts, send_displs, get_mpi_type<index_type>(),
+            cluster_buffer.data(), recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
 
         // assign the new data
-        delete[] static_cast<T*>(m_data.m_p);
+        delete[] static_cast<data_type*>(m_data.m_p);
         m_data.m_p = point_buffer;
         point_buffer = nullptr;
         m_data.m_chunk[0] = total_recv_items;
@@ -1009,9 +889,9 @@ public:
 
         // only reordering step needed for non-MPI implementation and final local reordering for MPI version
         // out-of-place rearranging of items
-        T* local_point_buffer = new T[m_initial_order.size() * dimensions];
+        data_type* local_point_buffer = new data_type[m_initial_order.size() * dimensions];
         std::vector<size_t> local_order_buffer(m_initial_order.size());
-        Clusters local_cluster_buffer(m_initial_order.size());
+        Clusters<index_type> local_cluster_buffer(m_initial_order.size());
 
         #pragma omp parallel for
         for (size_t i = 0; i < m_initial_order.size(); ++i) {
@@ -1020,15 +900,25 @@ public:
             local_order_buffer[copy_to] = m_initial_order[i];
             local_cluster_buffer[copy_to] = clusters[i];
             for (size_t d = 0; d < dimensions; ++d) {
-                local_point_buffer[copy_to * dimensions + d] = static_cast<T*>(m_data.m_p)[i * dimensions + d];
+                local_point_buffer[copy_to * dimensions + d] = static_cast<data_type*>(m_data.m_p)[i * dimensions + d];
             }
         }
 
         clusters.swap(local_cluster_buffer);
         m_initial_order.swap(local_order_buffer);
-        delete[] static_cast<T*>(m_data.m_p);
+        delete[] static_cast<data_type*>(m_data.m_p);
         m_data.m_p = local_point_buffer;
     }
 };
+
+#if !defined(IMPLEMENTING_OPTIMIZATION)
+
+#if defined(USE_AVX512)
+#include "spatial_index_avx512.tpp"
+#elif defined(USE_SVE)
+#include "spatial_index_sve.tpp"
+#endif
+
+#endif
 
 #endif // SPATIAL_INDEX_H

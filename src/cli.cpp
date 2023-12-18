@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <omp.h>
 #include <stdexcept>
@@ -26,6 +27,7 @@
 #include "hpdbscan.h"
 
 int main(int argc, char** argv) {
+    using index_type = std::int32_t;
     #ifdef WITH_MPI
     int error, provided;
     error = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
@@ -37,7 +39,7 @@ int main(int argc, char** argv) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     #endif
-    Clusters clusters;
+    Clusters<index_type> clusters;
 
     cxxopts::Options parser("HPDBSCAN", "Highly parallel DBSCAN clustering algorithm");
     parser.add_options()
@@ -83,7 +85,7 @@ int main(int argc, char** argv) {
     // run the clustering algorithm
     try {
         HPDBSCAN hpdbscan(arguments["epsilon"].as<float>(), arguments["minPoints"].as<size_t>());
-        clusters = hpdbscan.cluster(
+        clusters = hpdbscan.cluster<index_type>(
             arguments["input"].as<std::string>(),
             arguments["input-dataset"].as<std::string>(),
             arguments["threads"].as<int>()
