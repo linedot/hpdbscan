@@ -33,6 +33,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR
 endif()
 
 option(USE_ND_OPTIMIZATIONS "Optimize special cases for some number of dimensions in the data" ON)
+option(USE_4X_NEIGHBOUR_LOOP_UNROLL "In optimized region_query, unroll loop over neighbours 4x" ON)
 
 set(additional_sources)
 if(USE_AVX512)
@@ -68,6 +69,11 @@ if(USE_ND_OPTIMIZATIONS)
     target_compile_definitions(hpdbscan PRIVATE USE_ND_OPTIMIZATIONS)
     target_compile_definitions(hpdbscan-bin PRIVATE USE_ND_OPTIMIZATIONS)
     target_compile_definitions(hpdbscan64-bin PRIVATE USE_ND_OPTIMIZATIONS)
+endif()
+if(USE_4X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan-bin PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan64-bin PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
 endif()
 
 # NOTE: JUST FOR compile_commands.json/autocompletion, remove for release
