@@ -756,6 +756,17 @@ public:
             std::vector<index_type>& min_points_area,
             index_type& count) const;
 
+#if defined(USE_ND_OPTIMIZATIONS)
+    template<typename index_type, std::size_t Ndim>
+    Cluster<index_type> region_query_optimized_nd(
+            const index_type point_index, 
+            const std::vector<index_type>& neighboring_points,
+            const data_type EPS2,
+            const Clusters<index_type>& clusters,
+            std::vector<index_type>& min_points_area,
+            index_type& count) const;
+#endif
+
     template<typename index_type>
     Cluster<index_type> region_query(
             const index_type point_index, 

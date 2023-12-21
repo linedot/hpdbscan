@@ -32,6 +32,8 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR
     option(USE_SVE "Use Arm SVE optimizations" OFF)
 endif()
 
+option(USE_ND_OPTIMIZATIONS "Optimize special cases for some number of dimensions in the data" ON)
+
 set(additional_sources)
 if(USE_AVX512)
     set(additional_sources src/spatial_index_avx512.cpp)
@@ -61,6 +63,11 @@ if(USE_AVX512)
     target_compile_definitions(hpdbscan PRIVATE USE_AVX512)
     target_compile_definitions(hpdbscan-bin PRIVATE USE_AVX512)
     target_compile_definitions(hpdbscan64-bin PRIVATE USE_AVX512)
+endif()
+if(USE_ND_OPTIMIZATIONS)
+    target_compile_definitions(hpdbscan PRIVATE USE_ND_OPTIMIZATIONS)
+    target_compile_definitions(hpdbscan-bin PRIVATE USE_ND_OPTIMIZATIONS)
+    target_compile_definitions(hpdbscan64-bin PRIVATE USE_ND_OPTIMIZATIONS)
 endif()
 
 # NOTE: JUST FOR compile_commands.json/autocompletion, remove for release
