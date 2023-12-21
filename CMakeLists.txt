@@ -48,14 +48,19 @@ endif()
 ADD_LIBRARY(hpdbscan SHARED src/hpdbscan.cpp ${additional_sources})
 # set up the cli executable
 ADD_EXECUTABLE(hpdbscan-bin src/cli.cpp ${additional_sources})
+ADD_EXECUTABLE(hpdbscan64-bin src/cli.cpp ${additional_sources})
+
+target_compile_definitions(hpdbscan64-bin PRIVATE USE_INT64_INDEX)
 
 if(USE_SVE)
     target_compile_definitions(hpdbscan PRIVATE USE_SVE)
     target_compile_definitions(hpdbscan-bin PRIVATE USE_SVE)
+    target_compile_definitions(hpdbscan64-bin PRIVATE USE_SVE)
 endif()
 if(USE_AVX512)
     target_compile_definitions(hpdbscan PRIVATE USE_AVX512)
     target_compile_definitions(hpdbscan-bin PRIVATE USE_AVX512)
+    target_compile_definitions(hpdbscan64-bin PRIVATE USE_AVX512)
 endif()
 
 # NOTE: JUST FOR compile_commands.json/autocompletion, remove for release
@@ -63,6 +68,7 @@ endif()
 
 # define options
 TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_OUTPUT)
+TARGET_COMPILE_DEFINITIONS(hpdbscan64-bin PRIVATE WITH_OUTPUT)
 
 # check dependencies
 ## mpi, optional for distributed computing
@@ -71,6 +77,7 @@ IF(MPI_FOUND)
     SET(CMAKE_CXX_COMPILER "${MPI_CXX_COMPILER}")
     TARGET_COMPILE_DEFINITIONS(hpdbscan PRIVATE WITH_MPI)
     TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_MPI)
+    TARGET_COMPILE_DEFINITIONS(hpdbscan64-bin PRIVATE WITH_MPI)
 ELSE()
     MESSAGE("BUILDING WITHOUT MPI SUPPORT")
 ENDIF()
@@ -80,12 +87,15 @@ FIND_PACKAGE(OpenMP 4.0 REQUIRED)
 TARGET_LINK_LIBRARIES(hpdbscan PRIVATE ${OpenMP_CXX_FLAGS})
 TARGET_COMPILE_OPTIONS(hpdbscan PRIVATE ${OpenMP_CXX_FLAGS})
 TARGET_LINK_LIBRARIES(hpdbscan-bin PRIVATE ${OpenMP_CXX_FLAGS})
+TARGET_LINK_LIBRARIES(hpdbscan64-bin PRIVATE ${OpenMP_CXX_FLAGS})
 TARGET_COMPILE_OPTIONS(hpdbscan-bin PRIVATE ${OpenMP_CXX_FLAGS})
+TARGET_COMPILE_OPTIONS(hpdbscan64-bin PRIVATE ${OpenMP_CXX_FLAGS})
 
 ## hdf5
 FIND_PACKAGE(HDF5 1.8.10 REQUIRED)
 INCLUDE_DIRECTORIES("${HDF5_INCLUDE_DIRS}")
 TARGET_LINK_LIBRARIES(hpdbscan-bin PRIVATE "${HDF5_LIBRARIES}")
+TARGET_LINK_LIBRARIES(hpdbscan64-bin PRIVATE "${HDF5_LIBRARIES}")
 
 ## swig and python detection for optional bindings
 FIND_PACKAGE(SWIG)
@@ -143,3 +153,4 @@ ENDIF()
 
 # rename the binary
 SET_TARGET_PROPERTIES(hpdbscan-bin PROPERTIES OUTPUT_NAME hpdbscan)
+SET_TARGET_PROPERTIES(hpdbscan64-bin PROPERTIES OUTPUT_NAME hpdbscan64)

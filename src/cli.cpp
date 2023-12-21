@@ -27,7 +27,11 @@
 #include "hpdbscan.h"
 
 int main(int argc, char** argv) {
+    #if defined(USE_INT64_INDEX)
+    using index_type = std::int64_t;
+    #else
     using index_type = std::int32_t;
+    #endif
     #ifdef WITH_MPI
     int error, provided;
     error = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
