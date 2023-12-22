@@ -58,8 +58,6 @@ Cluster<std::int32_t> SpatialIndex<float>::template region_query_optimized_nd<in
         // std::cout << "V_INDICES_SCALED: ";
         // print_m512i(v_indices_scaled);
 
-        // Create result
-        __m512 v_results = _mm512_setzero_ps();
 
         // Loop over dimensions
         //for (size_t d = 0; d < dimensions; d++){
@@ -92,13 +90,14 @@ Cluster<std::int32_t> SpatialIndex<float>::template region_query_optimized_nd<in
         __m512 v_other_points_x = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_indices_scaled, np_ptr+0, 4);
         __m512 v_other_points_y = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_indices_scaled, np_ptr+1, 4);
         __m512 v_other_points_z = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_indices_scaled, np_ptr+2, 4);
-
+        
         __m512 v_diff_x = _mm512_sub_ps(v_current_point_x, v_other_points_x);
-        v_results = _mm512_fmadd_ps(v_diff_x, v_diff_x, v_results);
+        __m512 v_results = _mm512_mul_ps(v_diff_x, v_diff_x);
         __m512 v_diff_y = _mm512_sub_ps(v_current_point_y, v_other_points_y);
-        v_results = _mm512_fmadd_ps(v_diff_y, v_diff_y, v_results);
+        __m512 v_results1 = _mm512_mul_ps(v_diff_y, v_diff_y);
         __m512 v_diff_z = _mm512_sub_ps(v_current_point_z, v_other_points_z);
-        v_results = _mm512_fmadd_ps(v_diff_z, v_diff_z, v_results);
+        __m512 v_results2 = _mm512_fmadd_ps(v_diff_z, v_diff_z, v_results);
+        v_results = _mm512_add_ps(v_results2, v_results1);
         // ********************************************
 
 
