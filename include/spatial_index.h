@@ -69,6 +69,7 @@ class SpatialIndex {
 public:
     // implementations of the custom omp reduction operations
     static void vector_min(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
+        #pragma omp unroll partial
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::min(omp_in[index], omp_out[index]);
         }
@@ -76,6 +77,7 @@ public:
     #pragma omp declare reduction(vector_min: std::vector<data_type>: vector_min(omp_in, omp_out)) initializer(omp_priv = omp_orig)
 
     static void vector_max(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
+        #pragma omp unroll partial
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::max(omp_in[index], omp_out[index]);
         }
@@ -123,6 +125,7 @@ private:
     }
 
     void compute_cell_dimensions() {
+        #pragma omp simd reduction(*:m_total_cells)
         for (size_t i = 0; i < m_cell_dimensions.size(); ++i) {
             size_t cells = static_cast<size_t>(std::ceil((m_maximums[i] - m_minimums[i]) / m_epsilon)) + 1;
             m_cell_dimensions[i] = cells;
@@ -226,6 +229,7 @@ private:
         int recv_displs[m_size];
 
         // determine the number of entries in each process' histogram
+        #pragma omp unroll
         for (int i = 0; i < m_size; ++i) {
             send_counts[i] = m_cell_histogram.size() * 2;
             send_displs[i] = 0;
@@ -234,6 +238,7 @@ private:
 
         // ... based on this information we can calculate the displacements into the buffer
         size_t entries_count = 0;
+        #pragma omp simd reduction(+:entries_count)
         for (int i = 0; i < m_size; ++i) {
             recv_displs[i] = entries_count;
             entries_count += recv_counts[i];
@@ -241,10 +246,14 @@ private:
 
         // serialize the local histogram into a flat buffer
         std::vector<size_t> send_buffer(m_cell_histogram.size() * 2);
-        size_t send_buffer_index = 0;
-        for (const auto& item : m_cell_histogram) {
-            send_buffer[send_buffer_index++] = item.first;
-            send_buffer[send_buffer_index++] = item.second;
+        //size_t send_buffer_index = 0;
+        //size_t cell_index = 0;
+        size_t cell_size = m_cell_histogram.size();
+        size_t i = 0;
+        for (auto const& [key,value] : m_cell_histogram) {
+            send_buffer[i*2] = key;
+            send_buffer[i*2+1] = value;
+            i++;
         }
 
         // exchange the histograms
@@ -256,6 +265,7 @@ private:
 
         // sum-up the entries into a global histogram
         CellHistogram global_histogram;
+        #pragma omp unroll
         for (size_t i = 0; i < entries_count; i += 2) {
             global_histogram[recv_buffer[i]] += recv_buffer[i + 1];
         }
@@ -318,8 +328,8 @@ private:
         size_t total_score = 0;
         size_t score_index = 0;
 
-        for (auto& pair : cell_histogram) {
-            const Cell cell = pair.first;
+        for (auto const& [key,value] : cell_histogram) {
+            const Cell cell = key;
             const size_t score = compute_score(cell, cell_histogram);
             scores[score_index++] = score;
             total_score += score;
@@ -605,32 +615,114 @@ public:
         #endif
 
         // communicate the cell histograms and redistribute the points - only necessary when MPI is turned on
-        #ifdef WITH_MPI
+            #ifdef WITH_MPI
+            //#ifdef WITH_OUTPUT
+            //start = omp_get_wtime();
+            //if (m_rank == 0) {
+            //    std::cout << "\tDistributing points... " << std::flush;
+            //}
+            //#endif
             #ifdef WITH_OUTPUT
             start = omp_get_wtime();
             if (m_rank == 0) {
-                std::cout << "\tDistributing points... " << std::flush;
+                std::cout << "\tComputing global histogram...        " << std::flush;
             }
             #endif
             // compute a global histogram and redistribute the points based on that
             CellHistogram global_histogram = compute_global_histogram();
-            
+
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tComputing global histogram bounds... " << std::flush;
+            }
+            #endif
             compute_bounds(global_histogram);
+
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
 
             global_histogram.clear();
 
-	    redistribute_dataset();
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tRedistributing dataset...            " << std::flush;
+            }
+            #endif
+            redistribute_dataset();
+
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tComputing Cells...                   " << std::flush;
+            }
+            #endif
             // after the redistribution we have to reindex the new data yet again
             compute_cells();
 
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
+
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tComputing cell indices ...           " << std::flush;
+            }
+            #endif
             compute_cell_index();
 
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tComputing global point offsets ...   " << std::flush;
+            }
+            #endif
             compute_global_point_offset();
 
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+            #endif
+
+            #ifdef WITH_OUTPUT
+            start = omp_get_wtime();
+            if (m_rank == 0) {
+                std::cout << "\tSorting by cell ...                  " << std::flush;
+            }
+            #endif
+
             sort_by_cell();
-            
-	    #ifdef WITH_OUTPUT
-	    if (m_rank == 0) {
+
+            #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
                 std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
             }
             #endif

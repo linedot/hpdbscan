@@ -17,6 +17,10 @@ set(CMAKE_C_FLAGS_RELEASE "-Ofast")
 # Always output diagnostic colors
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     SET(CMAKE_CXX_FLAGS "-fdiagnostics-color ${CMAKE_CXX_FLAGS}")
+    option(REPORT_OPENMP_VEC_FAILS "Use -fopt-info-vec-omp-optimized-missed with GCC" ON)
+    if(REPORT_OPENMP_VEC_FAILS)    
+        SET(CMAKE_CXX_FLAGS "-fopt-info-vec-omp-optimized-missed ${CMAKE_CXX_FLAGS}")
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     SET(CMAKE_CXX_FLAGS "-fcolor-diagnostics ${CMAKE_CXX_FLAGS}")
 endif()
@@ -33,7 +37,8 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR
 endif()
 
 option(USE_ND_OPTIMIZATIONS "Optimize special cases for some number of dimensions in the data" ON)
-option(USE_4X_NEIGHBOUR_LOOP_UNROLL "In optimized region_query, unroll loop over neighbours 4x" ON)
+option(USE_4X_NEIGHBOUR_LOOP_UNROLL "In optimized region_query, unroll loop over neighbours 4x" OFF)
+option(USE_8X_NEIGHBOUR_LOOP_UNROLL "In optimized region_query, unroll loop over neighbours 8x" ON)
 
 set(additional_sources)
 if(USE_AVX512)
@@ -74,6 +79,11 @@ if(USE_4X_NEIGHBOUR_LOOP_UNROLL)
     target_compile_definitions(hpdbscan PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
     target_compile_definitions(hpdbscan-bin PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
     target_compile_definitions(hpdbscan64-bin PRIVATE USE_4X_NEIGHBOUR_LOOP_UNROLL)
+endif()
+if(USE_8X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan PRIVATE USE_8X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan-bin PRIVATE USE_8X_NEIGHBOUR_LOOP_UNROLL)
+    target_compile_definitions(hpdbscan64-bin PRIVATE USE_8X_NEIGHBOUR_LOOP_UNROLL)
 endif()
 
 # NOTE: JUST FOR compile_commands.json/autocompletion, remove for release
