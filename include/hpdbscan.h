@@ -493,7 +493,7 @@ public:
             #ifdef WITH_MPI
             if (m_rank == 0) {
             #endif
-                std::cout << "\tRecovering order...    " << std::flush;
+                std::cout << "\tRecovering order:    " << std::endl;
                 start = omp_get_wtime();
             #ifdef WITH_MPI
             }
@@ -504,7 +504,7 @@ public:
             #ifdef WITH_MPI
             if (m_rank == 0) {
             #endif
-            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            std::cout << "\tRecovering order finished in " << omp_get_wtime() - start << std::endl;
             #ifdef WITH_MPI
             }
             #endif

@@ -478,6 +478,7 @@ private:
 
         #pragma omp parallel for schedule(static)
         for (size_t i = 0; i < items; ++i) {
+            #pragma omp unroll partial
             for (size_t j = 0; j < maximum_digit_count; ++j) {
                 const size_t base  = RADIX_POWERS[j];
                 const size_t digit = m_initial_order[i + lower_bound] / base % RADIX_BUCKETS;
@@ -489,6 +490,7 @@ private:
         // accumulate the bucket entries to get the offsets
         #pragma omp parallel for shared(buckets)
         for (size_t j = 0; j < maximum_digit_count; ++j) {
+            #pragma omp unroll partial
             for (size_t f = 1; f < RADIX_BUCKETS; ++f) {
                 buckets[j][f] += buckets[j][f-1];
             }
@@ -911,7 +913,19 @@ public:
         const hsize_t dimensions = m_data.m_chunk[1];
 
         #ifdef WITH_MPI
+        #ifdef WITH_OUTPUT
+        double start = 0.0;
+            if (m_rank == 0) {
+                std::cout << "\tSort by order...      " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
         sort_by_order(clusters);
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
 
         // allocate buffers to do an inverse exchange
         int send_counts[m_size];
@@ -925,6 +939,12 @@ public:
         const size_t chunk_size = m_data.m_shape[0] / m_size;
         const size_t remainder = m_data.m_shape[0] % static_cast<size_t>(m_size);
         size_t previous_offset = 0;
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "\tPoints in chunk...    " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
 
         // find all the points that have a global index less than each rank's chunk size
         for (size_t i = 1; i < static_cast<size_t>(m_size) + 1; ++i) {
@@ -940,9 +960,28 @@ public:
 
         // exchange the resulting item counts and displacements to get the incoming items for this rank
         MPI_Alltoall(send_counts, 1, MPI_INT, recv_counts, 1, MPI_INT, MPI_COMM_WORLD);
+
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
+
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "\tReceive...            " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
+        #pragma omp simd
         for (int i = 0; i < m_size; ++i) {
             recv_displs[i] = (i == 0) ? 0 : recv_displs[i - 1] + recv_counts[i - 1];
         }
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
 
         // redistribute the dataset to their original owner ranks
         size_t total_recv_items = 0;
@@ -951,6 +990,14 @@ public:
         int recv_counts_points[m_size];
         int recv_displs_points[m_size];
 
+
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "\tRedistribute...       " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
+        #pragma omp simd reduction(+:total_recv_items)
         for (int i = 0; i < m_size; ++i) {
             total_recv_items += recv_counts[i];
             send_counts_points[i] = send_counts[i] * dimensions;
@@ -958,12 +1005,23 @@ public:
             recv_counts_points[i] = recv_counts[i] * dimensions;
             recv_displs_points[i] = recv_displs[i] * dimensions;
         }
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
 
         // allocate new buffers for the points and the order vectors
         data_type* point_buffer = new data_type[total_recv_items * dimensions];
         std::vector<size_t> order_buffer(total_recv_items);
         Clusters<index_type> cluster_buffer(total_recv_items);
 
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "\tMPI communication...  " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
         // actually transmit the data
         MPI_Alltoallv(
             static_cast<data_type*>(m_data.m_p), send_counts_points, send_displs_points, get_mpi_type<data_type>(),
@@ -978,6 +1036,17 @@ public:
             clusters.data(),       send_counts, send_displs, get_mpi_type<index_type>(),
             cluster_buffer.data(), recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+                std::cout << "\tCleanup...            " << std::flush;
+                start = omp_get_wtime();
+            }
+        #endif
 
         // assign the new data
         delete[] static_cast<data_type*>(m_data.m_p);
@@ -988,13 +1057,50 @@ public:
         order_buffer.clear();
         clusters.swap(cluster_buffer);
         cluster_buffer.clear();
+        #ifdef WITH_OUTPUT
+            if (m_rank == 0) {
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            }
+        #endif
         #endif
 
+
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "\tAllocating local point buffer...      " << std::flush;
+            #ifdef WITH_MPI
+            }
+            #endif
+            start = omp_get_wtime();
+        #endif
         // only reordering step needed for non-MPI implementation and final local reordering for MPI version
         // out-of-place rearranging of items
         data_type* local_point_buffer = new data_type[m_initial_order.size() * dimensions];
         std::vector<size_t> local_order_buffer(m_initial_order.size());
         Clusters<index_type> local_cluster_buffer(m_initial_order.size());
+
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            #ifdef WITH_MPI
+            }
+            #endif
+        #endif
+
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "\tRearrange locally out-of-place...      " << std::flush;
+            #ifdef WITH_MPI
+            }
+            #endif
+            start = omp_get_wtime();
+        #endif
 
         #pragma omp parallel for
         for (size_t i = 0; i < m_initial_order.size(); ++i) {
@@ -1002,15 +1108,45 @@ public:
 
             local_order_buffer[copy_to] = m_initial_order[i];
             local_cluster_buffer[copy_to] = clusters[i];
+            #pragma omp simd
             for (size_t d = 0; d < dimensions; ++d) {
                 local_point_buffer[copy_to * dimensions + d] = static_cast<data_type*>(m_data.m_p)[i * dimensions + d];
             }
         }
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            #ifdef WITH_MPI
+            }
+            #endif
+        #endif
 
+
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "\tSwapping buffers and deleting...      " << std::flush;
+            #ifdef WITH_MPI
+            }
+            #endif
+            start = omp_get_wtime();
+        #endif
         clusters.swap(local_cluster_buffer);
         m_initial_order.swap(local_order_buffer);
         delete[] static_cast<data_type*>(m_data.m_p);
         m_data.m_p = local_point_buffer;
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_MPI
+            if (m_rank == 0) {
+            #endif
+            std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
+            #ifdef WITH_MPI
+            }
+            #endif
+        #endif
     }
 };
 
