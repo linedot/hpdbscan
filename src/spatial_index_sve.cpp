@@ -146,13 +146,13 @@ Cluster<std::int32_t> SpatialIndex<float>::template region_query_optimized_nd<in
         svfloat32_t v_diff_z4 = svsub_f32_x(pg, other_point_z4, v_point_z);
         svfloat32_t v_result4_2 = svmla_f32_x(pg, v_result4, v_diff_z4, v_diff_z4);
         svfloat32_t v_diff_z5 = svsub_f32_x(pg, other_point_z5, v_point_z);
-        svfloat32_t v_result5_2 = svmla_f32_x(pg, v_result1, v_diff_z5, v_diff_z5);
+        svfloat32_t v_result5_2 = svmla_f32_x(pg, v_result5, v_diff_z5, v_diff_z5);
         svfloat32_t v_diff_z6 = svsub_f32_x(pg, other_point_z6, v_point_z);
-        svfloat32_t v_result6_2 = svmla_f32_x(pg, v_result2, v_diff_z6, v_diff_z6);
+        svfloat32_t v_result6_2 = svmla_f32_x(pg, v_result6, v_diff_z6, v_diff_z6);
         svfloat32_t v_diff_z7 = svsub_f32_x(pg, other_point_z7, v_point_z);
-        svfloat32_t v_result7_2 = svmla_f32_x(pg, v_result3, v_diff_z7, v_diff_z7);
+        svfloat32_t v_result7_2 = svmla_f32_x(pg, v_result7, v_diff_z7, v_diff_z7);
         svfloat32_t v_diff_z8 = svsub_f32_x(pg, other_point_z8, v_point_z);
-        svfloat32_t v_result8_2 = svmla_f32_x(pg, v_result4, v_diff_z8, v_diff_z8);
+        svfloat32_t v_result8_2 = svmla_f32_x(pg, v_result8, v_diff_z8, v_diff_z8);
 
         v_result1 = svadd_f32_x(pg, v_result1_2, v_result1_1);
         v_result2 = svadd_f32_x(pg, v_result2_2, v_result2_1);
