@@ -42,13 +42,20 @@ option(USE_8X_NEIGHBOUR_LOOP_UNROLL "In optimized region_query, unroll loop over
 
 set(additional_sources)
 if(USE_AVX512)
-    set(additional_sources src/spatial_index_avx512.cpp)
-    set_source_files_properties(src/spatial_index_avx512.cpp 
+    set(additional_sources 
+        src/spatial_index_avx512_i32_f32.cpp
+        src/spatial_index_avx512_i64_f32.cpp
+        )
+    set_source_files_properties(${additional_sources} 
         PROPERTIES COMPILE_FLAGS -mavx512f)
 endif()
 
 if(USE_SVE)
-    set(additional_sources src/spatial_index_sve.cpp)
+    set(additional_sources 
+        src/spatial_index_sve_i32_f32.cpp
+        )
+    set_source_files_properties(${additional_sources} 
+        PROPERTIES COMPILE_FLAGS -march=armv8-a+sve)
 endif()
 
 # set up the build targets
