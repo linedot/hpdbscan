@@ -76,7 +76,7 @@ class HPDBSCAN {
 #endif
         // local DBSCAN run
         #pragma omp parallel for schedule(dynamic, 2048) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
-        for (index_type point = lower; static_cast<size_t>(point) < upper; ++point) {
+        for (index_type point = lower; point < static_cast<index_type>(upper); ++point) {
             // small optimization, we only perform a neighborhood query if it is a new cell
             Cell current_cell = index.cell_of(point);
 

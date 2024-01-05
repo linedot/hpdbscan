@@ -9,7 +9,7 @@ typedef std::int32_t index_type;
 #if defined(USE_ND_OPTIMIZATIONS)
 template<>
 template<>
-Cluster<index_type> SpatialIndex<float>::template region_query_optimized_nd<index_type, 3>(
+Cluster<index_type> SpatialIndex<float>::region_query_optimized_nd<index_type, 3>(
         const index_type point_index,
         const std::vector<index_type>& neighboring_points,
         const float EPS2,
@@ -393,7 +393,7 @@ Cluster<index_type> SpatialIndex<float>::template region_query_optimized_nd<inde
 
 template<>
 template<>
-Cluster<index_type> SpatialIndex<float>::template region_query_optimized<index_type>(
+Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
         const index_type point_index,
         const std::vector<index_type>& neighboring_points,
         const float EPS2,

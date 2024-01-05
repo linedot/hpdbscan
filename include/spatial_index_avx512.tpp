@@ -2,7 +2,7 @@
 
 template<>
 template<>
-Cluster<std::int32_t> SpatialIndex<float>::template region_query<std::int32_t>(
+Cluster<std::int32_t> SpatialIndex<float>::region_query<std::int32_t>(
         const std::int32_t point_index,
         const std::vector<std::int32_t>& neighboring_points,
         const float EPS2,
@@ -22,7 +22,7 @@ Cluster<std::int32_t> SpatialIndex<float>::template region_query<std::int32_t>(
 
 template<>
 template<>
-Cluster<std::int64_t> SpatialIndex<float>::template region_query<std::int64_t>(
+Cluster<std::int64_t> SpatialIndex<float>::region_query<std::int64_t>(
         const std::int64_t point_index,
         const std::vector<std::int64_t>& neighboring_points,
         const float EPS2,

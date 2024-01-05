@@ -11,7 +11,7 @@ typedef std::int32_t index_type;
 #if defined(USE_ND_OPTIMIZATIONS)
 template<>
 template<>
-Cluster<std::int32_t> SpatialIndex<float>::template region_query_optimized_nd<int32_t, 3>(
+Cluster<std::int32_t> SpatialIndex<float>::region_query_optimized_nd<int32_t, 3>(
         const int32_t point_index,
         const std::vector<int32_t>& neighboring_points,
         const float EPS2,
@@ -447,7 +447,7 @@ Cluster<std::int32_t> SpatialIndex<float>::template region_query_optimized_nd<in
 
 template<>
 template<>
-Cluster<index_type> SpatialIndex<float>::template region_query_optimized<index_type>(
+Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
         const index_type point_index,
         const std::vector<index_type>& neighboring_points,
         const float EPS2,

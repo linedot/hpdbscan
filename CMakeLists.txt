@@ -47,7 +47,7 @@ if(USE_AVX512)
         src/spatial_index_avx512_i64_f32.cpp
         )
     set_source_files_properties(${additional_sources} 
-        PROPERTIES COMPILE_FLAGS -mavx512f)
+        PROPERTIES COMPILE_FLAGS "-mavx512f -mavx512dq")
 endif()
 
 if(USE_SVE)
@@ -102,7 +102,10 @@ TARGET_COMPILE_DEFINITIONS(hpdbscan64-bin PRIVATE WITH_OUTPUT)
 
 # check dependencies
 ## mpi, optional for distributed computing
+option(USE_MPI "Compile with MPI support" OFF)
+if(USE_MPI)
 FIND_PACKAGE(MPI)
+endif()
 IF(MPI_FOUND)
     SET(CMAKE_CXX_COMPILER "${MPI_CXX_COMPILER}")
     TARGET_COMPILE_DEFINITIONS(hpdbscan PRIVATE WITH_MPI)

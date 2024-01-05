@@ -69,7 +69,7 @@ class SpatialIndex {
 public:
     // implementations of the custom omp reduction operations
     static void vector_min(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
-        #pragma omp unroll partial
+        #pragma omp unroll
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::min(omp_in[index], omp_out[index]);
         }
@@ -77,7 +77,7 @@ public:
     #pragma omp declare reduction(vector_min: std::vector<data_type>: vector_min(omp_in, omp_out)) initializer(omp_priv = omp_orig)
 
     static void vector_max(std::vector<data_type>& omp_in, std::vector<data_type>& omp_out) {
-        #pragma omp unroll partial
+        #pragma omp unroll
         for (size_t index = 0; index < omp_out.size(); ++index) {
             omp_out[index] = std::max(omp_in[index], omp_out[index]);
         }
@@ -1073,7 +1073,11 @@ public:
             #ifdef WITH_MPI
             }
             #endif
+            #if !defined(WITH_MPI)
+            auto start = omp_get_wtime();
+            #else
             start = omp_get_wtime();
+            #endif
         #endif
         // only reordering step needed for non-MPI implementation and final local reordering for MPI version
         // out-of-place rearranging of items
