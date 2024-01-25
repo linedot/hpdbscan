@@ -76,32 +76,32 @@ Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized_nd<3
         svint32_t other_point_index7 = svadd_n_s32_z(pg, sv_indices_scaled7, 0);
         svint32_t other_point_index8 = svadd_n_s32_z(pg, sv_indices_scaled8, 0);
 
-        svfloat32_t other_point_x1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index1);
-        svfloat32_t other_point_x2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index2);
-        svfloat32_t other_point_x3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index3);
-        svfloat32_t other_point_x4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index4);
-        svfloat32_t other_point_x5 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index5);
-        svfloat32_t other_point_x6 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index6);
-        svfloat32_t other_point_x7 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index7);
-        svfloat32_t other_point_x8 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index8);
+        svfloat32_t other_point_x1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index1);
+        svfloat32_t other_point_x2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index2);
+        svfloat32_t other_point_x3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index3);
+        svfloat32_t other_point_x4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index4);
+        svfloat32_t other_point_x5 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index5);
+        svfloat32_t other_point_x6 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index6);
+        svfloat32_t other_point_x7 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index7);
+        svfloat32_t other_point_x8 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index8);
 
-        svfloat32_t other_point_y1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index1);
-        svfloat32_t other_point_y2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index2);
-        svfloat32_t other_point_y3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index3);
-        svfloat32_t other_point_y4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index4);
-        svfloat32_t other_point_y5 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index5);
-        svfloat32_t other_point_y6 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index6);
-        svfloat32_t other_point_y7 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index7);
-        svfloat32_t other_point_y8 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index8);
+        svfloat32_t other_point_y1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index1);
+        svfloat32_t other_point_y2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index2);
+        svfloat32_t other_point_y3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index3);
+        svfloat32_t other_point_y4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index4);
+        svfloat32_t other_point_y5 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index5);
+        svfloat32_t other_point_y6 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index6);
+        svfloat32_t other_point_y7 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index7);
+        svfloat32_t other_point_y8 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index8);
 
-        svfloat32_t other_point_z1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index1);
-        svfloat32_t other_point_z2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index2);
-        svfloat32_t other_point_z3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index3);
-        svfloat32_t other_point_z4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index4);
-        svfloat32_t other_point_z5 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index5);
-        svfloat32_t other_point_z6 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index6);
-        svfloat32_t other_point_z7 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index7);
-        svfloat32_t other_point_z8 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index8);
+        svfloat32_t other_point_z1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index1);
+        svfloat32_t other_point_z2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index2);
+        svfloat32_t other_point_z3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index3);
+        svfloat32_t other_point_z4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index4);
+        svfloat32_t other_point_z5 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index5);
+        svfloat32_t other_point_z6 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index6);
+        svfloat32_t other_point_z7 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index7);
+        svfloat32_t other_point_z8 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index8);
 
         svfloat32_t v_diff_x1 = svsub_f32_x(pg, other_point_x1, v_point_x);
         svfloat32_t v_result1 = svmul_f32_x(pg, v_diff_x1, v_diff_x1);
@@ -276,20 +276,20 @@ Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized_nd<3
         svint32_t other_point_index3 = svadd_n_s32_z(pg, sv_indices_scaled3, 0);
         svint32_t other_point_index4 = svadd_n_s32_z(pg, sv_indices_scaled4, 0);
 
-        svfloat32_t other_point_x1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index1);
-        svfloat32_t other_point_x2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index2);
-        svfloat32_t other_point_x3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index3);
-        svfloat32_t other_point_x4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index4);
+        svfloat32_t other_point_x1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index1);
+        svfloat32_t other_point_x2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index2);
+        svfloat32_t other_point_x3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index3);
+        svfloat32_t other_point_x4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index4);
 
-        svfloat32_t other_point_y1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index1);
-        svfloat32_t other_point_y2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index2);
-        svfloat32_t other_point_y3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index3);
-        svfloat32_t other_point_y4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index4);
+        svfloat32_t other_point_y1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index1);
+        svfloat32_t other_point_y2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index2);
+        svfloat32_t other_point_y3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index3);
+        svfloat32_t other_point_y4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index4);
 
-        svfloat32_t other_point_z1 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index1);
-        svfloat32_t other_point_z2 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index2);
-        svfloat32_t other_point_z3 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index3);
-        svfloat32_t other_point_z4 = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index4);
+        svfloat32_t other_point_z1 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index1);
+        svfloat32_t other_point_z2 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index2);
+        svfloat32_t other_point_z3 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index3);
+        svfloat32_t other_point_z4 = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index4);
 
         svfloat32_t v_diff_x1 = svsub_f32_x(pg, other_point_x1, v_point_x);
         svfloat32_t v_result1 = svmul_f32_x(pg, v_diff_x1, v_diff_x1);
@@ -392,7 +392,7 @@ Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized_nd<3
 
         //    svint32_t  other_point_index = svadd_n_s32_z(pg, sv_indices_scaled, d);
 
-        //    svfloat32_t other_point_coordinate_v = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0], other_point_index);
+        //    svfloat32_t other_point_coordinate_v = svld1_gather_s32index_f32(pg, &np_ptr[0], other_point_index);
 
         //    svfloat32_t diff_v = svsub_f32_x(pg, other_point_coordinate_v, point_coordinate_v);
 
@@ -408,9 +408,9 @@ Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized_nd<3
 
         svint32_t other_point_index = svadd_n_s32_z(pg, sv_indices_scaled, 0);
 
-        svfloat32_t other_point_x = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+0, other_point_index);
-        svfloat32_t other_point_y = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+1, other_point_index);
-        svfloat32_t other_point_z = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0]+2, other_point_index);
+        svfloat32_t other_point_x = svld1_gather_s32index_f32(pg, &np_ptr[0]+0, other_point_index);
+        svfloat32_t other_point_y = svld1_gather_s32index_f32(pg, &np_ptr[0]+1, other_point_index);
+        svfloat32_t other_point_z = svld1_gather_s32index_f32(pg, &np_ptr[0]+2, other_point_index);
 
         svfloat32_t v_diff_x = svsub_f32_x(pg, other_point_x, v_current_point_x);
         svfloat32_t v_results = svmul_f32_x(pg, v_diff_x, v_diff_x);
@@ -495,7 +495,7 @@ Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized(
 
             svint32_t  other_point_index = svadd_n_s32_z(pg, sv_indices_scaled, d);
 
-            svfloat32_t other_point_coordinate_v = svld1_gather_s32index_f32(pg, &neighbouring_points_ptr[0], other_point_index);
+            svfloat32_t other_point_coordinate_v = svld1_gather_s32index_f32(pg, &np_ptr[0], other_point_index);
 
             svfloat32_t diff_v = svsub_f32_x(pg, other_point_coordinate_v, point_coordinate_v);
 
