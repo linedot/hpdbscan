@@ -54,26 +54,26 @@
 #undef MTC
 
 #if defined(WITH_OUTPUT)
-#include <vector>
-#include <cstddef>
-#include <iostream>
-
-void print_atoav_params(std::string label, std::vector<int> counts, std::vector<int> displs, std::size_t ranks, std::size_t this_rank)
-{
-    std::cout << label << " (rank " << this_rank << "):\n";
-    std::cout << "Counts: {";
-    for(std::size_t rank = 0; rank< ranks; rank++)
-    {
-        std::cout << counts[rank] << ", ";
-    }
-    std::cout << "}\n";
-    std::cout << "Displs: {";
-    for(std::size_t rank = 0; rank< ranks; rank++)
-    {
-        std::cout << displs[rank] << ", ";
-    }
-    std::cout << "}\n";
-}
+//#include <vector>
+//#include <cstddef>
+//#include <iostream>
+//
+//inline void print_atoav_params(std::string label, std::vector<int> counts, std::vector<int> displs, std::size_t ranks, std::size_t this_rank)
+//{
+//    std::cout << label << " (rank " << this_rank << "):\n";
+//    std::cout << "Counts: {";
+//    for(std::size_t rank = 0; rank< ranks; rank++)
+//    {
+//        std::cout << counts[rank] << ", ";
+//    }
+//    std::cout << "}\n";
+//    std::cout << "Displs: {";
+//    for(std::size_t rank = 0; rank< ranks; rank++)
+//    {
+//        std::cout << displs[rank] << ", ";
+//    }
+//    std::cout << "}\n";
+//}
 #endif
 
 #endif // MPI_UTIL_H
