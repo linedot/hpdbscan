@@ -9,7 +9,7 @@ Cluster<std::int32_t> SpatialIndex<float, std::int32_t>::template region_query(
         std::vector<std::int32_t>& min_points_area,
         std::int32_t& count) const {
 
-    return region_query_optimized<int32_t>(
+    return region_query_optimized(
             point_index,
             neighboring_points,
             EPS2,
