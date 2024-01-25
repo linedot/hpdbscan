@@ -15,6 +15,7 @@
 #define HPDBSCAN_H
 
 #include <cmath>
+#include <cassert>
 #include <cstdint>
 #include <iomanip>
 #include <stdexcept>
@@ -41,6 +42,7 @@
 #include "rules.h"
 #include "spatial_index.h"
 
+template<typename index_type>
 class HPDBSCAN {
     float m_epsilon;
     size_t m_min_points;
@@ -51,8 +53,9 @@ class HPDBSCAN {
     #endif
 
 
-    template <typename data_type, typename index_type>
-    Rules<index_type> local_dbscan(Clusters<index_type>& clusters, const SpatialIndex<data_type>& index) {
+    template <typename data_type>
+    Rules<index_type> local_dbscan(Clusters<index_type>& clusters, 
+            const SpatialIndex<data_type, index_type>& index) {
         const float EPS2 = m_epsilon * m_epsilon;
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
@@ -81,7 +84,7 @@ class HPDBSCAN {
             Cell current_cell = index.cell_of(point);
 
             if (current_cell != previous_cell) {
-                neighboring_points = index.template get_neighbors<index_type>(current_cell);
+                neighboring_points = index.template get_neighbors(current_cell);
                 previous_cell = current_cell;
             }
 
@@ -138,22 +141,23 @@ class HPDBSCAN {
     }
 
     #ifdef WITH_MPI
-    template <typename data_type, typename index_type>
-    void merge_halos(Clusters<index_type>& clusters, Rules<index_type>& rules, const SpatialIndex<data_type>& index) {
+    template <typename data_type>
+    void merge_halos(Clusters<index_type>& clusters, Rules<index_type>& rules,
+            const SpatialIndex<data_type, index_type>& index) {
         Cuts cuts = index.compute_cuts();
 
         // exchange the number of points in the halos
-        int send_counts[m_size];
-        int recv_counts[m_size];
+        std::vector<int> send_counts(m_size, 0);
+        std::vector<int> recv_counts(m_size, 0);
         for (size_t i = 0; i < cuts.size(); ++i) {
             send_counts[i] = static_cast<int>(cuts[i].second - cuts[i].first);
         }
-        MPI_Alltoall(send_counts, 1, get_mpi_type<index_type>(),
-                     recv_counts, 1, get_mpi_type<index_type>(), MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT32_T,
+                     recv_counts.data(), 1, MPI_INT32_T, MPI_COMM_WORLD);
 
         // accumulate the numbers of points from each node
-        int send_displs[m_size];
-        int recv_displs[m_size];
+        std::vector<int> send_displs(m_size, 0);
+        std::vector<int> recv_displs(m_size, 0);
         size_t total_items_to_receive = 0;
         for (int i = 0; i < m_size; ++i) {
             send_displs[i] = cuts[i].first;
@@ -164,29 +168,29 @@ class HPDBSCAN {
         // create a buffer for the incoming cluster labels and exchange them
         const size_t upper_halo_bound = index.upper_halo_bound();
         const size_t lower_halo_bound = index.lower_halo_bound();
-        Cluster<index_type> halo_labels[total_items_to_receive];
+        Clusters<index_type> halo_labels(total_items_to_receive);
 
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, get_mpi_type<index_type>(),
-            halo_labels,     recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
+            clusters.data(),    send_counts.data(), send_displs.data(), get_mpi_type<index_type>(),
+            halo_labels.data(), recv_counts.data(), recv_displs.data(), get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
 
         // update the local clusters with the received information
-        for (int i = 0; i < m_size; ++i) {
+        for (size_t i = 0; i < m_size; ++i) {
             size_t offset = (i < m_rank ? lower_halo_bound : upper_halo_bound - recv_counts[i]);
 
-            for (int j = 0; j < recv_counts[i]; ++j) {
+            for (size_t j = 0; j < recv_counts[i]; ++j) {
                 const size_t index = j + offset;
                 const Cluster<index_type> own_cluster = clusters[index];
                 const Cluster<index_type> halo_cluster = halo_labels[j + recv_displs[i]];
 
                 // incoming cluster label is core point, update it
                 if (own_cluster < 0) {
-                    const std::pair<Cluster<index_type>, Cluster<index_type>> minmax = 
+                    const auto [min,max] = 
                         std::minmax(
-                                static_cast<Cluster<index_type>>(std::abs(own_cluster)),
+                                static_cast<index_type>(std::abs(own_cluster)),
                                 halo_cluster);
-                    rules.update(minmax.second, minmax.first);
+                    rules.update(max, min);
                 } else {
                     atomic_min(&clusters[index], halo_cluster);
                 }
@@ -194,22 +198,21 @@ class HPDBSCAN {
         }
     }
 
-    template<typename index_type>
     void distribute_rules(Rules<index_type>& rules) {
         const int number_of_rules = static_cast<int>(rules.size());
 
         // determine how many rules each rank will send
-        int send_counts[m_size];
-        int send_displs[m_size];
-        int recv_counts[m_size];
-        int recv_displs[m_size];
+        std::vector<int> send_counts(m_size);
+        std::vector<int> send_displs(m_size);
+        std::vector<int> recv_counts(m_size);
+        std::vector<int> recv_displs(m_size);
 
         for (int i = 0; i < m_size; ++i) {
             send_counts[i] = 2 * number_of_rules;
             send_displs[i] = 0;
         }
-        MPI_Alltoall(send_counts, 1, get_mpi_type<index_type>(),
-                     recv_counts, 1, get_mpi_type<index_type>(), MPI_COMM_WORLD);
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT32_T,
+                     recv_counts.data(), 1, MPI_INT32_T, MPI_COMM_WORLD);
 
         // ... based on that calculate the displacements into the receive buffer
         size_t total = 0;
@@ -219,7 +222,7 @@ class HPDBSCAN {
         }
 
         // serialize the rules
-        Cluster<index_type> serialized_rules[send_counts[m_rank]];
+        Clusters<index_type> serialized_rules(send_counts[m_rank]);
         size_t index = 0;
         for (const auto& rule : rules) {
             serialized_rules[index++] = rule.first;
@@ -227,10 +230,10 @@ class HPDBSCAN {
         }
 
         // exchange the rules and update the own rules
-        Cluster<index_type> incoming_rules[total];
+        Clusters<index_type> incoming_rules(total);
         MPI_Alltoallv(
-            serialized_rules, send_counts, send_displs, get_mpi_type<index_type>(),
-            incoming_rules,   recv_counts, recv_displs, get_mpi_type<index_type>(), MPI_COMM_WORLD
+            serialized_rules.data(), send_counts.data(), send_displs.data(), get_mpi_type<index_type>(),
+            incoming_rules.data(),   recv_counts.data(), recv_displs.data(), get_mpi_type<index_type>(), MPI_COMM_WORLD
         );
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
@@ -238,7 +241,6 @@ class HPDBSCAN {
     }
     #endif
 
-    template<typename index_type>
     void apply_rules(Clusters<index_type>& clusters, const Rules<index_type>& rules) {
         #pragma omp parallel for
         for (size_t i = 0; i < clusters.size(); ++i) {
@@ -255,8 +257,8 @@ class HPDBSCAN {
     }
 
     #ifdef WITH_OUTPUT
-    template<typename index_type>
-    void summarize(const Dataset& dataset, const Clusters<index_type>& clusters) const {
+    template<typename data_type>
+    void summarize(const Dataset<data_type>& dataset, const Clusters<index_type>& clusters) const {
         std::unordered_set<Cluster<index_type>> unique_clusters;
         size_t cluster_points = 0;
         size_t core_points = 0;
@@ -280,16 +282,16 @@ class HPDBSCAN {
 
         #ifdef WITH_MPI
         int number_of_unique_clusters = static_cast<int>(unique_clusters.size());
-        int set_counts[m_size];
-        int set_displs[m_size];
+        std::vector<int> set_counts(m_size);
+        std::vector<int> set_displs(m_size);
 
         if (m_rank == 0) {
         #endif
         std::cout << "Summary..." << std::endl;
         #ifdef WITH_MPI
         }
-        MPI_Gather(&number_of_unique_clusters, 1, get_mpi_type<index_type>(), 
-                   set_counts, 1, get_mpi_type<index_type>(), 0, MPI_COMM_WORLD);
+        MPI_Gather(&number_of_unique_clusters, 1, MPI_INT32_T, 
+                   set_counts.data(), 1, MPI_INT32_T, 0, MPI_COMM_WORLD);
 
         // allocate the buffers for the serialized sets
         Clusters<index_type> global_buffer;
@@ -309,12 +311,12 @@ class HPDBSCAN {
         // collect the individual unique clusters on the MPI root into a global buffer
         MPI_Gatherv(
             local_buffer.data(), number_of_unique_clusters, get_mpi_type<index_type>(),
-            global_buffer.data(), set_counts, set_displs, get_mpi_type<index_type>(), 0, MPI_COMM_WORLD
+            global_buffer.data(), set_counts.data(), set_displs.data(), get_mpi_type<index_type>(), 0, MPI_COMM_WORLD
         );
         // accumulate the metrics of each node
         MPI_Reduce(
             m_rank == 0 ? MPI_IN_PLACE : metrics, metrics, sizeof(metrics) / sizeof(size_t),
-            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD
+            MPI_UINT64_T, MPI_SUM, 0, MPI_COMM_WORLD
         );
 
         if (m_rank == 0) {
@@ -343,74 +345,51 @@ public:
         }
     }
 
-    template<typename index_type>
     Clusters<index_type> cluster(const std::string& path, const std::string& dataset) {
-        return cluster<index_type>(path, dataset, omp_get_max_threads());
+        return cluster(path, dataset, omp_get_max_threads());
     }
 
-    template<typename index_type>
+    template<typename data_type>
     Clusters<index_type> cluster(const std::string& path, const std::string& dataset, int threads) {
         // read in the data
-        Dataset data = IO::read_hdf5(path, dataset);
+        Dataset<data_type> data = IO::read_hdf5<data_type>(path, dataset);
 
-        // determine which template to invoke
-        H5T_class_t type_class = H5Tget_class(data.m_type);
-        size_t precision = H5Tget_precision(data.m_type);
-
-        // integer
-        if (type_class == H5T_INTEGER) {
-            H5T_sign_t sign = H5Tget_sign(data.m_type);
-
-            // signed
-            if (sign == H5T_SGN_2) {
-                if (precision == 8) {
-                    return cluster<int8_t, index_type>(data, threads);
-                } else if (precision == 16) {
-                    return cluster<int16_t, index_type>(data, threads);
-                } else if (precision == 32) {
-                    return cluster<int32_t, index_type>(data, threads);
-                } else if (precision == 64) {
-                    return cluster<int64_t, index_type>(data, threads);
-                } else {
-                    throw std::invalid_argument("Unsupported signed integer precision");
-                }
-            // unsigned
-            } else {
-                if (precision == 8) {
-                    return cluster<uint8_t, index_type>(data, threads);
-                } else if (precision == 16) {
-                    return cluster<uint16_t, index_type>(data, threads);
-                } else if (precision == 32) {
-                    return cluster<uint32_t, index_type>(data, threads);
-                } else if (precision == 64) {
-                    return cluster<uint64_t, index_type>(data, threads);
-                } else {
-                    throw std::invalid_argument("Unsupported unsigned integer precision");
-                }
-            }
-        // floating point
-        } else if (type_class == H5T_FLOAT) {
-            if (precision == 32) {
-                #ifdef WITH_OUTPUT
-                std::cout << "fp32 data\n";
-                #endif
-                return cluster<float, index_type>(data, threads);
-            } else if (precision == 64) {
-                #ifdef WITH_OUTPUT
-                std::cout << "fp64 data\n";
-                #endif
-                return cluster<double, index_type>(data, threads);
-            } else {
-                throw std::invalid_argument("Unsupported floating point precision");
-            }
-        // unsupported type
-        } else {
-            throw std::invalid_argument("Unsupported data set type");
-        }
+        return cluster<data_type>(data, threads);
     }
 
-    template <typename data_type, typename index_type>
-    Clusters<index_type> cluster(Dataset& dataset, int threads=omp_get_max_threads()) {
+    Clusters<index_type> cluster(const std::string& path, const std::string& dataset, int threads) {
+        // get H5 data type
+        hid_t hdf5_type = IO::get_hdf5_datatype(path, dataset);
+
+#define H5TC(native, h5)\
+        if (hdf5_type == h5)\
+        {\
+            return cluster<native>(path, dataset, threads);\
+        }
+#define H5TCe(native, h5)\
+        else if (hdf5_type == h5)\
+        {\
+            return cluster<native>(path, dataset, threads);\
+        }
+        H5TC(std::int8_t,    H5T_NATIVE_SCHAR)
+        H5TCe(std::int16_t,  H5T_NATIVE_SHORT)
+        H5TCe(std::int32_t,  H5T_NATIVE_INT)
+        H5TCe(std::int64_t,  H5T_NATIVE_LONG)
+        H5TCe(std::uint8_t,  H5T_NATIVE_UCHAR)
+        H5TCe(std::uint16_t, H5T_NATIVE_USHORT)
+        H5TCe(std::uint32_t, H5T_NATIVE_UINT)
+        H5TCe(std::uint64_t, H5T_NATIVE_ULONG)
+        H5TCe(float,         H5T_NATIVE_FLOAT)
+        H5TCe(double,        H5T_NATIVE_DOUBLE)
+
+#undef H5TC
+#undef H5TCe
+
+        throw std::invalid_argument("Unsupported data set type");
+    }
+
+    template <typename data_type>
+    Clusters<index_type> cluster(Dataset<data_type>& dataset, int threads=omp_get_max_threads()) {
         #ifdef WITH_OUTPUT
         double execution_start = omp_get_wtime();
         #endif
@@ -423,7 +402,7 @@ public:
         #endif
 
         // initialize the feature indexer
-        SpatialIndex<data_type> index(dataset, m_epsilon);
+        SpatialIndex<data_type, index_type> index(dataset, m_epsilon);
         // initialize the clusters array
         Clusters<index_type> clusters(dataset.m_chunk[0], NOT_VISITED<index_type>);
 
@@ -460,7 +439,7 @@ public:
             }
             #endif
             merge_halos(clusters, rules, index);
-            distribute_rules<index_type>(rules);
+            distribute_rules(rules);
             #ifdef WITH_OUTPUT
             if (m_rank == 0) {
                 std::cout << "[OK] in " << omp_get_wtime() - start << std::endl;
@@ -526,15 +505,15 @@ public:
         return clusters;
     }
 
-    template <typename data_type, typename index_type>
+    template <typename data_type>
     Clusters<index_type> cluster(data_type* data, int dim0, int dim1, int threads) {
         hsize_t chunk[2] = {static_cast<hsize_t>(dim0), static_cast<hsize_t>(dim1)};
-        Dataset dataset(data, chunk, get_hdf5_type<data_type>());
+        Dataset<data_type> dataset(data, chunk, get_hdf5_type<data_type>());
 
         return cluster<data_type, index_type>(dataset, threads);
     }
 
-    template <typename data_type, typename index_type>
+    template <typename data_type>
     Clusters<index_type> cluster(data_type* data, int dim0, int dim1) {
         return cluster<data_type, index_type>(data, dim0, dim1, omp_get_max_threads());
     }

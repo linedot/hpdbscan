@@ -22,6 +22,8 @@
 #include <memory>
 #include <vector>
 
+#include "dynamic_aligned_allocator.hpp"
+
 using ssize_t       = ptrdiff_t;
 using Locator       = std::pair<size_t, size_t>;
 template <typename index_type>

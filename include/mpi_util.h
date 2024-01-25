@@ -20,28 +20,30 @@
 #include <mpi.h>
 
 // Mpi Type Case
-#define MTCex(type, mpi_type, extra) \
+#define MTC(type, mpi_type) \
     if(std::is_same_v<type, index_type>) \
     { \
         return mpi_type; \
-    } \
-    extra
-#define MTC(type, mpi_type) MTCex(type, mpi_type,)
-#define MTCe(type, mpi_type) MTCex(type, mpi_type, else)
+    } 
+#define MTCe(type, mpi_type) \
+    else if(std::is_same_v<type, index_type>) \
+    { \
+        return mpi_type; \
+    } 
 
     template<typename index_type>
-    inline constexpr MPI_Datatype get_mpi_type()
+    constexpr MPI_Datatype get_mpi_type()
     {
-        MTCe(int8_t, MPI_INT8_T)
-        MTCe(int16_t, MPI_INT16_T)
-        MTCe(int32_t, MPI_INT32_T)
-        MTCe(int64_t, MPI_INT64_T)
-        MTCe(uint8_t, MPI_UINT8_T)
-        MTCe(uint16_t, MPI_UINT16_T)
-        MTCe(uint32_t, MPI_UINT32_T)
-        MTCe(uint64_t, MPI_UINT64_T)
-        MTCe(float, MPI_FLOAT)
-        MTC(double, MPI_DOUBLE)
+        MTC(float, MPI_FLOAT)
+        MTCe(double, MPI_DOUBLE)
+        MTCe(std::int8_t, MPI_INT8_T)
+        MTCe(std::int16_t, MPI_INT16_T)
+        MTCe(std::int32_t, MPI_INT32_T)
+        MTCe(std::int64_t, MPI_INT64_T)
+        MTCe(std::uint8_t, MPI_UINT8_T)
+        MTCe(std::uint16_t, MPI_UINT16_T)
+        MTCe(std::uint32_t, MPI_UINT32_T)
+        MTCe(std::uint64_t, MPI_UINT64_T)
 
         // gotta noexcept for constexpr, so just return int
         return MPI_INT;
@@ -50,6 +52,28 @@
 // Don't pollute compiler with macros
 #undef MTCe
 #undef MTC
-#undef MTCex
+
+#if defined(WITH_OUTPUT)
+#include <vector>
+#include <cstddef>
+#include <iostream>
+
+void print_atoav_params(std::string label, std::vector<int> counts, std::vector<int> displs, std::size_t ranks, std::size_t this_rank)
+{
+    std::cout << label << " (rank " << this_rank << "):\n";
+    std::cout << "Counts: {";
+    for(std::size_t rank = 0; rank< ranks; rank++)
+    {
+        std::cout << counts[rank] << ", ";
+    }
+    std::cout << "}\n";
+    std::cout << "Displs: {";
+    for(std::size_t rank = 0; rank< ranks; rank++)
+    {
+        std::cout << displs[rank] << ", ";
+    }
+    std::cout << "}\n";
+}
+#endif
 
 #endif // MPI_UTIL_H

@@ -16,50 +16,50 @@
 #include "hpdbscan.h"
 
 // explicit template instantiation
-template Clusters<std::int16_t> HPDBSCAN::cluster<uint8_t ,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<uint16_t,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<uint32_t,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<uint64_t,std::int16_t>(Dataset&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<uint8_t >(Dataset<uint8_t >&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<uint16_t>(Dataset<uint16_t>&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<uint32_t>(Dataset<uint32_t>&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<uint64_t>(Dataset<uint64_t>&, int);
 
-template Clusters<std::int16_t> HPDBSCAN::cluster<int8_t ,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<int16_t,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<int32_t,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<int64_t,std::int16_t>(Dataset&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<int8_t >(Dataset<int8_t >&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<int16_t>(Dataset<int16_t>&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<int32_t>(Dataset<int32_t>&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<int64_t>(Dataset<int64_t>&, int);
 
-template Clusters<std::int16_t> HPDBSCAN::cluster<float ,std::int16_t>(Dataset&, int);
-template Clusters<std::int16_t> HPDBSCAN::cluster<double,std::int16_t>(Dataset&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<float >(Dataset<float >&, int);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster<double>(Dataset<double>&, int);
 
-template Clusters<std::int16_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset);
-template Clusters<std::int16_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset, int threads);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster(const std::string& path, const std::string& dataset);
+template Clusters<std::int16_t> HPDBSCAN<std::int16_t>::cluster(const std::string& path, const std::string& dataset, int threads);
 
-template Clusters<std::int32_t> HPDBSCAN::cluster<uint8_t ,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<uint16_t,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<uint32_t,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<uint64_t,std::int32_t>(Dataset&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<uint8_t >(Dataset<uint8_t >&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<uint16_t>(Dataset<uint16_t>&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<uint32_t>(Dataset<uint32_t>&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<uint64_t>(Dataset<uint64_t>&, int);
 
-template Clusters<std::int32_t> HPDBSCAN::cluster<int8_t ,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<int16_t,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<int32_t,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<int64_t,std::int32_t>(Dataset&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<int8_t >(Dataset<int8_t >&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<int16_t>(Dataset<int16_t>&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<int32_t>(Dataset<int32_t>&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<int64_t>(Dataset<int64_t>&, int);
 
-template Clusters<std::int32_t> HPDBSCAN::cluster<float ,std::int32_t>(Dataset&, int);
-template Clusters<std::int32_t> HPDBSCAN::cluster<double,std::int32_t>(Dataset&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<float >(Dataset<float >&, int);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster<double>(Dataset<double>&, int);
 
-template Clusters<std::int32_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset);
-template Clusters<std::int32_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset, int threads);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster(const std::string& path, const std::string& dataset);
+template Clusters<std::int32_t> HPDBSCAN<std::int32_t>::cluster(const std::string& path, const std::string& dataset, int threads);
 
-template Clusters<std::int64_t> HPDBSCAN::cluster<uint8_t ,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<uint16_t,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<uint32_t,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<uint64_t,std::int64_t>(Dataset&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<uint8_t >(Dataset<uint8_t >&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<uint16_t>(Dataset<uint16_t>&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<uint32_t>(Dataset<uint32_t>&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<uint64_t>(Dataset<uint64_t>&, int);
 
-template Clusters<std::int64_t> HPDBSCAN::cluster<int8_t ,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<int16_t,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<int32_t,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<int64_t,std::int64_t>(Dataset&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<int8_t >(Dataset<int8_t >&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<int16_t>(Dataset<int16_t>&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<int32_t>(Dataset<int32_t>&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<int64_t>(Dataset<int64_t>&, int);
 
-template Clusters<std::int64_t> HPDBSCAN::cluster<float ,std::int64_t>(Dataset&, int);
-template Clusters<std::int64_t> HPDBSCAN::cluster<double,std::int64_t>(Dataset&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<float >(Dataset<float >&, int);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster<double>(Dataset<double>&, int);
 
-template Clusters<std::int64_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset);
-template Clusters<std::int64_t> HPDBSCAN::cluster(const std::string& path, const std::string& dataset, int threads);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster(const std::string& path, const std::string& dataset);
+template Clusters<std::int64_t> HPDBSCAN<std::int64_t>::cluster(const std::string& path, const std::string& dataset, int threads);

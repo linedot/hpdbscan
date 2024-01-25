@@ -88,8 +88,10 @@ int main(int argc, char** argv) {
 
     // run the clustering algorithm
     try {
-        HPDBSCAN hpdbscan(arguments["epsilon"].as<float>(), arguments["minPoints"].as<size_t>());
-        clusters = hpdbscan.cluster<index_type>(
+        HPDBSCAN<index_type> hpdbscan(
+                arguments["epsilon"].as<float>(), 
+                arguments["minPoints"].as<size_t>());
+        clusters = hpdbscan.cluster(
             arguments["input"].as<std::string>(),
             arguments["input-dataset"].as<std::string>(),
             arguments["threads"].as<int>()

@@ -20,19 +20,21 @@
 #include <hdf5.h>
 
 // HDF5 Type Case
-#define H5TCex(type, h5_type, extra) \
+#define H5TC(type, h5_type) \
     if(std::is_same_v<type, index_type>) \
     { \
         return h5_type; \
-    } \
-    extra
-#define H5TC(type, h5_type) H5TCex(type, h5_type,)
-#define H5TCe(type, h5_type) H5TCex(type, h5_type, else)
+    } 
+#define H5TCe(type, h5_type) \
+    else if(std::is_same_v<type, index_type>) \
+    { \
+        return h5_type; \
+    } 
 
     template<typename index_type>
     inline constexpr hid_t get_hdf5_type()
     {
-        H5TCe(std::int8_t,   H5T_NATIVE_SCHAR)
+        H5TC(std::int8_t,   H5T_NATIVE_SCHAR)
         H5TCe(std::int16_t,  H5T_NATIVE_SHORT)
         H5TCe(std::int32_t,  H5T_NATIVE_INT)
         H5TCe(std::int64_t,  H5T_NATIVE_LONG)
@@ -41,7 +43,7 @@
         H5TCe(std::uint32_t, H5T_NATIVE_UINT)
         H5TCe(std::uint64_t, H5T_NATIVE_ULONG)
         H5TCe(float,    H5T_NATIVE_FLOAT)
-        H5TC(double,    H5T_NATIVE_DOUBLE)
+        H5TCe(double,    H5T_NATIVE_DOUBLE)
 
         // gotta noexcept for constexpr, so just return int
         return H5T_NATIVE_INT;
@@ -50,6 +52,5 @@
 // Don't pollute compiler with macros
 #undef H5TCe
 #undef H5TC
-#undef H5TCex
 
 #endif // MPI_UTIL_H

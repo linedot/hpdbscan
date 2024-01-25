@@ -11,7 +11,7 @@ typedef std::int64_t index_type;
 #if defined(USE_ND_OPTIMIZATIONS)
 template<>
 template<>
-Cluster<index_type> SpatialIndex<float>::region_query_optimized_nd<index_type, 3>(
+Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized_nd<3>(
         const index_type point_index,
         const std::vector<index_type>& neighboring_points,
         const float EPS2,
@@ -19,7 +19,8 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized_nd<index_type, 3
         std::vector<index_type>& min_points_area,
         index_type& count) const {
     const size_t dimensions = static_cast<size_t>(m_data.m_chunk[1]);
-    const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
+    const float* point = &m_data.m_elements[point_index * dimensions];
+    const float* np_ptr = m_data.m_elements.data();
     Cluster<index_type> cluster_label = m_global_point_offset + point_index + 1;
     constexpr size_t elements_in_vector = sizeof(__m512)/sizeof(float);
     constexpr size_t indices_in_vector = sizeof(__m512i)/sizeof(index_type);
@@ -28,7 +29,6 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized_nd<index_type, 3
     // Initialize array pointers and masks
     size_t n = neighboring_points.size();
     min_points_area = std::vector<index_type>(n, NOT_VISITED<index_type>);
-    const float* np_ptr = static_cast<float*>(m_data.m_p);
 
     __m512 v_eps = _mm512_set1_ps(EPS2);
     __m512 v_zero_ps = _mm512_setzero_ps();
@@ -278,8 +278,7 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized_nd<index_type, 3
 #endif
 
 template<>
-template<>
-Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
+Cluster<index_type> SpatialIndex<float, index_type>::region_query_optimized(
         const index_type point_index,
         const std::vector<index_type>& neighboring_points,
         const float EPS2,
@@ -290,7 +289,7 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
 #if defined(USE_ND_OPTIMIZATIONS)
     if (3 == dimensions)
     {
-        return region_query_optimized_nd<index_type, 3>(
+        return region_query_optimized_nd<3>(
                 point_index,
                 neighboring_points,
                 EPS2,
@@ -300,7 +299,8 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
                 );
     }
 #endif
-    const float* point = static_cast<float*>(m_data.m_p) + point_index * dimensions;
+    const float* point = &m_data.m_elements[point_index * dimensions];
+    const float* np_ptr = m_data.m_elements.data();
     const size_t precision = sizeof(float);
     Cluster<index_type> cluster_label = m_global_point_offset + point_index + 1;
     constexpr size_t elements_in_vector = sizeof(__m512)/sizeof(float);
@@ -310,7 +310,6 @@ Cluster<index_type> SpatialIndex<float>::region_query_optimized<index_type>(
     // Initialize array pointers and masks
     size_t n = neighboring_points.size();
     min_points_area = std::vector<index_type>(n, NOT_VISITED<index_type>);
-    const float* np_ptr = static_cast<float*>(m_data.m_p);
 
     __m512 v_eps = _mm512_set1_ps(EPS2);
     __m512 v_zero_ps = _mm512_setzero_ps();
