@@ -32,7 +32,7 @@
     } 
 
     template<typename index_type>
-    constexpr MPI_Datatype get_mpi_type()
+    MPI_Datatype get_mpi_type()
     {
         MTC(float, MPI_FLOAT)
         MTCe(double, MPI_DOUBLE)
@@ -45,8 +45,7 @@
         MTCe(std::uint32_t, MPI_UINT32_T)
         MTCe(std::uint64_t, MPI_UINT64_T)
 
-        // gotta noexcept for constexpr, so just return int
-        return MPI_INT;
+        throw std::invalid_argument("No MPI type mapped to specified type");
     }
 
 // Don't pollute compiler with macros

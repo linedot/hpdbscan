@@ -59,20 +59,20 @@ struct dynamic_aligned_allocator
 private:
     std::size_t alignment;
 
-    template<class U>
-    friend bool operator==(const dynamic_aligned_allocator <T>& a1, const dynamic_aligned_allocator <U>& a2);
+    template<typename S, typename U>
+    friend bool operator==(const dynamic_aligned_allocator <S>& a1, const dynamic_aligned_allocator <U>& a2);
 
-    template<class U>
-    friend bool operator!=(const dynamic_aligned_allocator <T>& a1, const dynamic_aligned_allocator <U>& a2);
+    template<typename S, typename U>
+    friend bool operator!=(const dynamic_aligned_allocator <S>& a1, const dynamic_aligned_allocator <U>& a2);
 };
  
-template<class T, class U>
+template<typename T, typename U>
 bool operator==(const dynamic_aligned_allocator <T>& a1, const dynamic_aligned_allocator <U>& a2) 
 { 
     return a1.alignment == a2.alignment; 
 }
  
-template<class T, class U>
+template<typename T, typename U>
 bool operator!=(const dynamic_aligned_allocator <T>& a1, const dynamic_aligned_allocator <U>& a2)
 {
     return a1.alignment != a2.alignment;

@@ -222,10 +222,10 @@ private:
     #ifdef WITH_MPI
     CellHistogram compute_global_histogram() {
         // fetch cell histograms across all nodes
-        std::vector<int> send_counts(m_size);
-        std::vector<int> send_displs(m_size);
-        std::vector<int> recv_counts(m_size);
-        std::vector<int> recv_displs(m_size);
+        std::vector<int> send_counts(m_size, 0);
+        std::vector<int> send_displs(m_size, 0);
+        std::vector<int> recv_counts(m_size, 0);
+        std::vector<int> recv_displs(m_size, 0);
 
         // determine the number of entries in each process' histogram
         for (int i = 0; i < m_size; ++i) {
@@ -394,10 +394,10 @@ private:
         const size_t dimensions = m_data.m_chunk[1];
 
         // calculate the send number of points to be transmitted to each rank
-        std::vector<int> send_counts(m_size);
-        std::vector<int> send_displs(m_size);
-        std::vector<int> recv_counts(m_size);
-        std::vector<int> recv_displs(m_size);
+        std::vector<int> send_counts(m_size, 0);
+        std::vector<int> send_displs(m_size, 0);
+        std::vector<int> recv_counts(m_size, 0);
+        std::vector<int> recv_displs(m_size, 0);
 
         for (std::size_t i = 0; i < m_size; ++i) {
             const auto& bound = m_cell_bounds[i];
@@ -417,10 +417,10 @@ private:
 
         // calculate the corresponding send and receive counts for the label/order vectors
         size_t total_recv_items = 0;
-        std::vector<int> send_counts_labels(m_size);
-        std::vector<int> send_displs_labels(m_size);
-        std::vector<int> recv_counts_labels(m_size);
-        std::vector<int> recv_displs_labels(m_size);
+        std::vector<int> send_counts_labels(m_size, 0);
+        std::vector<int> send_displs_labels(m_size, 0);
+        std::vector<int> recv_counts_labels(m_size, 0);
+        std::vector<int> recv_displs_labels(m_size, 0);
 
         for (std::size_t i = 0; i < m_size; ++i) {
             total_recv_items += recv_counts[i];
@@ -922,10 +922,10 @@ public:
         #endif
 
         // allocate buffers to do an inverse exchange
-        std::vector<int> send_counts(m_size);
-        std::vector<int> send_displs(m_size);
-        std::vector<int> recv_counts(m_size);
-        std::vector<int> recv_displs(m_size);
+        std::vector<int> send_counts(m_size, 0);
+        std::vector<int> send_displs(m_size, 0);
+        std::vector<int> recv_counts(m_size, 0);
+        std::vector<int> recv_displs(m_size, 0);
 
         const size_t lower_bound = lower_halo_bound();
         const size_t upper_bound = upper_halo_bound();
@@ -979,10 +979,10 @@ public:
 
         // redistribute the dataset to their original owner ranks
         size_t total_recv_items = 0;
-        std::vector<int> send_counts_points(m_size);
-        std::vector<int> send_displs_points(m_size);
-        std::vector<int> recv_counts_points(m_size);
-        std::vector<int> recv_displs_points(m_size);
+        std::vector<int> send_counts_points(m_size, 0);
+        std::vector<int> send_displs_points(m_size, 0);
+        std::vector<int> recv_counts_points(m_size, 0);
+        std::vector<int> recv_displs_points(m_size, 0);
 
 
         #ifdef WITH_OUTPUT
@@ -1076,8 +1076,7 @@ public:
         #endif
         // only reordering step needed for non-MPI implementation and final local reordering for MPI version
         // out-of-place rearranging of items
-        //data_type* local_point_buffer = new data_type[m_initial_order.size() * dimensions];
-            std::vector<data_type, dynamic_aligned_allocator<data_type>>
+        std::vector<data_type, dynamic_aligned_allocator<data_type>>
                 local_point_buffer(m_initial_order.size()*dimensions,
                         dynamic_aligned_allocator<data_type>(64));
         std::vector<size_t> local_order_buffer(m_initial_order.size());

@@ -186,10 +186,9 @@ class HPDBSCAN {
 
                 // incoming cluster label is core point, update it
                 if (own_cluster < 0) {
-                    const auto [min,max] = 
-                        std::minmax(
-                                static_cast<index_type>(std::abs(own_cluster)),
-                                halo_cluster);
+                    //own_cluster = std::abs(own_cluster);
+                    index_type a_own_cluster = -own_cluster;
+                    const auto [min,max] = std::minmax(a_own_cluster, halo_cluster);
                     rules.update(max, min);
                 } else {
                     atomic_min(&clusters[index], halo_cluster);
@@ -439,6 +438,7 @@ public:
             }
             #endif
             merge_halos(clusters, rules, index);
+            MPI_Barrier(MPI_COMM_WORLD);
             distribute_rules(rules);
             #ifdef WITH_OUTPUT
             if (m_rank == 0) {
